@@ -169,3 +169,129 @@ class Zap:
         # Point lumineux au centre
         pygame.draw.circle(screen, self.config.WHITE,
                          (int(self.x), int(self.y)), self.size)
+
+
+class Lightning:
+    """Classe pour les éclairs instantanés"""
+    
+    def __init__(self, start_x, start_y, target_x, target_y, config):
+        self.start_x = start_x
+        self.start_y = start_y
+        self.target_x = target_x
+        self.target_y = target_y
+        self.config = config
+        self.damage = config.LIGHTNING_DAMAGE
+        
+        # Durée d'affichage
+        self.lifetime = config.LIGHTNING_DISPLAY_TIME
+        self.current_life = self.lifetime
+        
+        # Points intermédiaires pour effet de zigzag
+        self.points = self.generate_lightning_points()
+    
+    def generate_lightning_points(self):
+        """Génère des points intermédiaires pour l'effet de zigzag"""
+        points = [(self.start_x, self.start_y)]
+        
+        # Nombre de segments
+        segments = 5
+        
+        for i in range(1, segments):
+            # Interpolation linéaire entre start et target
+            t = i / segments
+            x = self.start_x + (self.target_x - self.start_x) * t
+            y = self.start_y + (self.target_y - self.start_y) * t
+            
+            # Ajouter du bruit pour l'effet zigzag
+            offset = self.config.WINDOW_WIDTH * 0.02  # 2% de la largeur
+            x += random.uniform(-offset, offset)
+            y += random.uniform(-offset, offset)
+            
+            points.append((x, y))
+        
+        points.append((self.target_x, self.target_y))
+        return points
+    
+    def update(self):
+        """Met à jour l'éclair"""
+        self.current_life -= 1
+        return self.current_life > 0
+    
+    def draw(self, screen):
+        """Dessine l'éclair avec effet de zigzag"""
+        if self.current_life <= 0:
+            return
+        
+        # Intensité basée sur la durée de vie restante
+        intensity = self.current_life / self.lifetime
+        
+        # Couleur qui s'estompe
+        color = tuple(int(c * intensity) for c in self.config.LIGHTNING_COLOR)
+        secondary_color = tuple(int(c * intensity) for c in self.config.LIGHTNING_SECONDARY_COLOR)
+        
+        # Dessiner les segments de l'éclair
+        for i in range(len(self.points) - 1):
+            start_point = (int(self.points[i][0]), int(self.points[i][1]))
+            end_point = (int(self.points[i + 1][0]), int(self.points[i + 1][1]))
+            
+            # Ligne principale (épaisse)
+            pygame.draw.line(screen, color, start_point, end_point, 3)
+            
+            # Ligne secondaire (fine) pour l'effet de lueur
+            pygame.draw.line(screen, secondary_color, start_point, end_point, 1)
+
+
+class Particle:
+    """Classe pour les particules d'explosion"""
+    
+    def __init__(self, x, y, config):
+        self.x = x
+        self.y = y
+        self.config = config
+        
+        # Vélocité aléatoire
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(0.5, 1.5) * config.PARTICLE_SPEED
+        self.vel_x = math.cos(angle) * speed
+        self.vel_y = math.sin(angle) * speed
+        
+        # Propriétés visuelles
+        self.color = random.choice(config.PARTICLE_COLORS)
+        self.size = random.randint(1, config.PARTICLE_SIZE)
+        self.lifetime = config.PARTICLE_LIFETIME
+        self.current_life = self.lifetime
+        
+        # Gravité légère
+        self.gravity = 0.1
+    
+    def update(self):
+        """Met à jour la particule"""
+        # Mouvement
+        self.x += self.vel_x
+        self.y += self.vel_y
+        
+        # Gravité
+        self.vel_y += self.gravity
+        
+        # Friction
+        self.vel_x *= 0.98
+        self.vel_y *= 0.98
+        
+        # Durée de vie
+        self.current_life -= 1
+        
+        return self.current_life > 0
+    
+    def draw(self, screen):
+        """Dessine la particule"""
+        if self.current_life <= 0:
+            return
+        
+        # Transparence basée sur la durée de vie
+        alpha = self.current_life / self.lifetime
+        
+        # Couleur avec transparence
+        color = tuple(int(c * alpha) for c in self.color)
+        
+        # Dessiner la particule
+        pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.size)

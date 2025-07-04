@@ -35,7 +35,7 @@ class Config:
         
         # Paramètres du joueur (adaptatifs)
         self.PLAYER_SIZE = int(self.WINDOW_WIDTH * 0.02)  # 2% de la largeur
-        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.005  # Vitesse proportionnelle
+        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.001  # Vitesse proportionnelle
         self.PLAYER_MAX_HEALTH = 100
         self.PLAYER_FRICTION = 0.85  # Inertie
         
@@ -48,8 +48,29 @@ class Config:
         # Paramètres des projectiles (adaptatifs)
         self.ZAP_SPEED = self.WINDOW_WIDTH * 0.01  # 1% de la largeur par frame
         self.ZAP_DAMAGE = 25
-        self.ZAP_FIRE_RATE = 10  # frames entre chaque tir
+        self.ZAP_FIRE_RATE = 60  # frames entre chaque tir
         self.ZAP_SIZE = 3  # Taille du point lumineux
+        
+        # Paramètres des éclairs (nouveau)
+        self.LIGHTNING_DAMAGE = 50  # Plus de dégâts que les zaps
+        self.LIGHTNING_FIRE_RATE = 30  # 1 seconde à 60fps
+        self.LIGHTNING_RANGE = self.WINDOW_WIDTH * 0.3  # 30% de la largeur
+        self.LIGHTNING_DISPLAY_TIME = 6  # 0.1 seconde à 60fps
+        self.LIGHTNING_COLOR = (255, 255, 255)  # Blanc éclatant
+        self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)  # Bleu clair
+        
+        # Paramètres des particules d'explosion
+        self.PARTICLE_COUNT = 8  # Nombre de particules par explosion
+        self.PARTICLE_SPEED = self.WINDOW_WIDTH * 0.003  # Vitesse des particules
+        self.PARTICLE_LIFETIME = 30  # Durée de vie en frames
+        self.PARTICLE_SIZE = 2  # Taille des particules
+        self.PARTICLE_COLORS = [
+            (255, 255, 0),   # Jaune
+            (255, 165, 0),   # Orange
+            (255, 0, 0),     # Rouge
+            (255, 255, 255), # Blanc
+            (255, 192, 203)  # Rose
+        ]
         
         # Interface utilisateur
         self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur

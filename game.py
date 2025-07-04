@@ -5,7 +5,7 @@ Moteur principal du jeu Last Man Standing
 import pygame
 import random
 import math
-from entities import Player, Enemy, Zap
+from entities import Player, Enemy, Zap, Lightning, Particle
 
 class Game:
     """Classe principale du jeu"""
@@ -34,6 +34,8 @@ class Game:
         )
         self.enemies = []
         self.zaps = []
+        self.lightnings = []  # Nouvelle liste pour les éclairs
+        self.particles = []   # Nouvelle liste pour les particules
         
         # Gestion des vagues d'ennemis
         self.wave_number = 1
@@ -46,6 +48,7 @@ class Game:
         
         # Tir automatique
         self.fire_timer = 0
+        self.lightning_timer = 0  # Nouveau timer pour les éclairs
     
     def handle_events(self):
         """Gère les événements pygame"""
@@ -121,11 +124,17 @@ class Game:
                 if self.player.health <= 0:
                     self.game_over = True
         
-        # Tir automatique
+        # Tir automatique (zaps)
         self.fire_timer += 1
         if self.fire_timer >= self.config.ZAP_FIRE_RATE and self.enemies:
             self.auto_fire()
             self.fire_timer = 0
+        
+        # Éclairs automatiques (nouveau)
+        self.lightning_timer += 1
+        if self.lightning_timer >= self.config.LIGHTNING_FIRE_RATE:
+            self.auto_lightning()
+            self.lightning_timer = 0
         
         # Met à jour les zaps
         for zap in self.zaps[:]:
@@ -147,6 +156,16 @@ class Game:
                         self.enemies.remove(enemy)
                         self.score += 10
                     break
+        
+        # Met à jour les éclairs (nouveau)
+        for lightning in self.lightnings[:]:
+            if not lightning.update():
+                self.lightnings.remove(lightning)
+        
+        # Met à jour les particules (nouveau)
+        for particle in self.particles[:]:
+            if not particle.update():
+                self.particles.remove(particle)
     
     def spawn_enemy(self):
         """Fait apparaître un ennemi sur le bord de l'écran"""
@@ -203,6 +222,54 @@ class Game:
             zap = Zap(player_center_x, player_center_y, dx, dy, self.config)
             self.zaps.append(zap)
     
+    def auto_lightning(self):
+        """Lance un éclair automatique si un ennemi est à portée"""
+        if not self.enemies:
+            return
+        
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        # Trouver les ennemis à portée
+        enemies_in_range = []
+        for enemy in self.enemies:
+            enemy_center_x = enemy.x + enemy.size // 2
+            enemy_center_y = enemy.y + enemy.size // 2
+            
+            distance = math.sqrt((enemy_center_x - player_center_x)**2 + 
+                               (enemy_center_y - player_center_y)**2)
+            
+            if distance <= self.config.LIGHTNING_RANGE:
+                enemies_in_range.append(enemy)
+        
+        if enemies_in_range:
+            # Choisir un ennemi aléatoire dans la portée
+            target = random.choice(enemies_in_range)
+            target_x = target.x + target.size // 2
+            target_y = target.y + target.size // 2
+            
+            # Créer l'éclair
+            lightning = Lightning(player_center_x, player_center_y, 
+                                target_x, target_y, self.config)
+            self.lightnings.append(lightning)
+            
+            # Infliger des dégâts immédiatement
+            target.take_damage(self.config.LIGHTNING_DAMAGE)
+            
+            # Créer les particules d'explosion
+            self.create_explosion_particles(target_x, target_y)
+            
+            # Retirer l'ennemi s'il est mort
+            if target.health <= 0:
+                self.enemies.remove(target)
+                self.score += 15  # Plus de points pour l'éclair
+    
+    def create_explosion_particles(self, x, y):
+        """Crée des particules d'explosion à la position donnée"""
+        for _ in range(self.config.PARTICLE_COUNT):
+            particle = Particle(x, y, self.config)
+            self.particles.append(particle)
+    
     def check_collision(self, obj1, obj2):
         """Vérifie la collision entre deux objets"""
         return (obj1.x < obj2.x + obj2.size and
@@ -223,6 +290,14 @@ class Game:
             
             for zap in self.zaps:
                 zap.draw(self.screen)
+            
+            # Dessiner les éclairs (nouveau)
+            for lightning in self.lightnings:
+                lightning.draw(self.screen)
+            
+            # Dessiner les particules (nouveau)
+            for particle in self.particles:
+                particle.draw(self.screen)
         
         # Interface utilisateur
         self.draw_ui()
@@ -273,6 +348,12 @@ class Game:
         delay_text = f"Délai spawn: {self.enemy_spawn_delay/60:.1f}s"
         delay_surface = self.small_font.render(delay_text, True, self.config.GRAY)
         self.screen.blit(delay_surface, (10, 85))
+        
+        # Afficher le statut des éclairs (nouveau)
+        lightning_cooldown = max(0, self.config.LIGHTNING_FIRE_RATE - self.lightning_timer) / 60
+        lightning_text = f"Éclair: {lightning_cooldown:.1f}s"
+        lightning_surface = self.small_font.render(lightning_text, True, self.config.CYAN)
+        self.screen.blit(lightning_surface, (10, 110))
         
         # Score
         score_text = f"Score: {self.score}"
@@ -350,6 +431,7 @@ class Game:
         self.enemy_spawn_timer = 0
         self.enemy_spawn_delay = 120
         self.fire_timer = 0
+        self.lightning_timer = 0  # Nouveau
         
         # Réinitialiser le joueur
         self.player = Player(
@@ -361,6 +443,8 @@ class Game:
         # Vider les listes
         self.enemies.clear()
         self.zaps.clear()
+        self.lightnings.clear()  # Nouveau
+        self.particles.clear()   # Nouveau
     
     def run(self):
         """Boucle principale du jeu"""
