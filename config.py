@@ -53,7 +53,8 @@ class Config:
         
         # Paramètres des éclairs (nouveau)
         self.LIGHTNING_DAMAGE = 50  # Plus de dégâts que les zaps
-        self.LIGHTNING_FIRE_RATE = 30  # 1 seconde à 60fps
+        self.LIGHTNING_FIRE_RATE_BASE = 60  # 1 seconde de base à 60fps
+        self.LIGHTNING_FIRE_RATE_MIN = 6   # 0.1 seconde minimum à 60fps
         self.LIGHTNING_RANGE = self.WINDOW_WIDTH * 0.3  # 30% de la largeur
         self.LIGHTNING_DISPLAY_TIME = 6  # 0.1 seconde à 60fps
         self.LIGHTNING_COLOR = (255, 255, 255)  # Blanc éclatant
@@ -76,15 +77,13 @@ class Config:
         self.ENERGY_ORB_DAMAGE = 40  # Dégâts des boules d'énergie
         self.ENERGY_ORB_SPAWN_RATE = 300  # 5 secondes à 60fps
         self.ENERGY_ORB_LIFETIME = 600  # 10 secondes total à 60fps
-        self.ENERGY_ORB_FAST_DURATION = 300  # 5 secondes à vitesse rapide
-        self.ENERGY_ORB_SLOW_DURATION = 300  # 5 secondes à vitesse lente
-        self.ENERGY_ORB_FAST_SPEED = 2 * 3.14159 / 60  # 1 tour/seconde
-        self.ENERGY_ORB_SLOW_SPEED = 3.14159 / 60  # 0.5 tour/seconde
+        self.ENERGY_ORB_SPEED = 2 * 3.14159 / 60  # 1 tour/seconde constant
         self.ENERGY_ORB_RADIUS = self.WINDOW_WIDTH * 0.08  # 8% de la largeur
         self.ENERGY_ORB_SIZE = int(self.WINDOW_WIDTH * 0.01)  # 1% de la largeur
         self.ENERGY_ORB_COLOR = (138, 43, 226)  # Violet/Pourpre
         self.ENERGY_ORB_GLOW_COLOR = (255, 0, 255)  # Magenta lumineux
-        self.ENERGY_ORB_MAX_COUNT = 3  # Maximum 3 boules à la fois
+        self.ENERGY_ORB_MAX_COUNT_BASE = 1  # Nombre de départ
+        self.ENERGY_ORB_MAX_COUNT_FINAL = 6  # Maximum final possible
         
         # Interface utilisateur
         self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur

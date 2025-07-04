@@ -46,13 +46,7 @@ class Game:
         # Tir automatique
         self.fire_timer = 0
         self.lightning_timer = 0  # Nouveau timer pour les éclairs
-        
-        # Progression des capacités avec les vagues
-        self.current_energy_orb_max = config.ENERGY_ORB_MAX_COUNT_BASE  # Commence avec 1 boule
-        self.current_lightning_fire_rate = config.LIGHTNING_FIRE_RATE_BASE  # Commence avec 1s
-        
-        # Créer la première boule d'énergie au début
-        self.spawn_initial_energy_orb()
+        self.energy_orb_timer = 0  # Nouveau timer pour les boules d'énergie
     
     def handle_events(self):
         """Gère les événements pygame"""
@@ -96,9 +90,6 @@ class Game:
             self.enemies_per_wave += 2  # Plus d'ennemis par vague
             self.enemies_spawned = 0
             
-            # Progression des capacités tous les 5 niveaux
-            self.update_abilities_progression()
-            
             # Réduction du délai entre les ennemis (plus difficile)
             reduction_factor = 0.85 ** (self.wave_number - 1)
             self.enemy_spawn_delay = max(
@@ -107,7 +98,6 @@ class Game:
             )
             
             print(f"🌊 Vague {self.wave_number} - {self.enemies_per_wave} ennemis - Délai: {self.enemy_spawn_delay/60:.1f}s")
-            print(f"⚡ Capacités: {len(self.energy_orbs)}/{self.current_energy_orb_max} orbes, Éclair: {self.current_lightning_fire_rate/60:.1f}s")
         
         # Spawn d'un nouvel ennemi si nécessaire
         if self.enemies_spawned < self.enemies_per_wave:
@@ -138,12 +128,15 @@ class Game:
         
         # Éclairs automatiques (nouveau)
         self.lightning_timer += 1
-        if self.lightning_timer >= self.current_lightning_fire_rate:
+        if self.lightning_timer >= self.config.LIGHTNING_FIRE_RATE:
             self.auto_lightning()
             self.lightning_timer = 0
         
-        # Vérification de sécurité : s'assurer d'avoir le bon nombre de boules
-        self.ensure_correct_orb_count()
+        # Boules d'énergie automatiques (nouveau)
+        self.energy_orb_timer += 1
+        if self.energy_orb_timer >= self.config.ENERGY_ORB_SPAWN_RATE:
+            self.spawn_energy_orb()
+            self.energy_orb_timer = 0
         
         # Met à jour les zaps
         for zap in self.zaps[:]:
@@ -306,7 +299,7 @@ class Game:
     
     def spawn_energy_orb(self):
         """Fait apparaître une boule d'énergie si le maximum n'est pas atteint"""
-        if len(self.energy_orbs) >= self.current_energy_orb_max:
+        if len(self.energy_orbs) >= self.config.ENERGY_ORB_MAX_COUNT:
             return
         
         player_center_x = self.player.x + self.player.size // 2
@@ -320,49 +313,9 @@ class Game:
         orb = EnergyOrb(player_center_x, player_center_y, orb_index, total_orbs, self.config)
         self.energy_orbs.append(orb)
         
-        print(f"🔮 Orbe #{total_orbs} créée ! Total: {len(self.energy_orbs)}/{self.current_energy_orb_max}")
-        
         # Mettre à jour la formation de toutes les boules existantes
         for i, existing_orb in enumerate(self.energy_orbs):
             existing_orb.update_formation(i, total_orbs)
-    
-    def spawn_initial_energy_orb(self):
-        """Créer la première boule d'énergie au début du jeu"""
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
-        
-        orb = EnergyOrb(player_center_x, player_center_y, 0, 1, self.config)
-        self.energy_orbs.append(orb)
-    
-    def update_abilities_progression(self):
-        """Met à jour les capacités du joueur tous les 5 niveaux"""
-        if self.wave_number % 5 == 0:  # Tous les 5 niveaux
-            # Augmenter le nombre max de boules d'énergie
-            if self.current_energy_orb_max < self.config.ENERGY_ORB_MAX_COUNT_FINAL:
-                old_max = self.current_energy_orb_max
-                self.current_energy_orb_max += 1
-                print(f"🔮 Amélioration niveau {self.wave_number}: Boules d'énergie {old_max} → {self.current_energy_orb_max} (max: {self.config.ENERGY_ORB_MAX_COUNT_FINAL})")
-                
-                # Ajouter immédiatement la nouvelle boule d'énergie
-                if len(self.energy_orbs) < self.current_energy_orb_max:
-                    self.spawn_energy_orb()
-                    print(f"🔮 Boule d'énergie #{len(self.energy_orbs)} créée instantanément ! Total actuel: {len(self.energy_orbs)}")
-            else:
-                print(f"🔮 Niveau {self.wave_number}: Nombre max de boules d'énergie déjà atteint ({self.current_energy_orb_max})")
-            
-            # Réduire le délai des éclairs (améliorer la cadence)
-            if self.current_lightning_fire_rate > self.config.LIGHTNING_FIRE_RATE_MIN:
-                old_rate = self.current_lightning_fire_rate
-                # Réduction de 0.1s (6 frames à 60fps)
-                self.current_lightning_fire_rate = max(
-                    self.config.LIGHTNING_FIRE_RATE_MIN,
-                    self.current_lightning_fire_rate - 6
-                )
-                print(f"⚡ Amélioration niveau {self.wave_number}: Éclairs {old_rate/60:.1f}s → {self.current_lightning_fire_rate/60:.1f}s")
-            else:
-                print(f"⚡ Niveau {self.wave_number}: Vitesse max des éclairs déjà atteinte ({self.current_lightning_fire_rate/60:.1f}s)")
-        else:
-            print(f"📊 Niveau {self.wave_number}: Pas d'amélioration (prochaine au niveau {((self.wave_number // 5) + 1) * 5})")
     
     def create_explosion_particles(self, x, y):
         """Crée des particules d'explosion à la position donnée"""
@@ -454,13 +407,14 @@ class Game:
         self.screen.blit(delay_surface, (10, 85))
         
         # Afficher le statut des éclairs (nouveau)
-        lightning_cooldown = max(0, self.current_lightning_fire_rate - self.lightning_timer) / 60
+        lightning_cooldown = max(0, self.config.LIGHTNING_FIRE_RATE - self.lightning_timer) / 60
         lightning_text = f"Éclair: {lightning_cooldown:.1f}s"
         lightning_surface = self.small_font.render(lightning_text, True, self.config.CYAN)
         self.screen.blit(lightning_surface, (10, 110))
         
         # Afficher le statut des boules d'énergie (nouveau)
-        orb_text = f"Boules d'énergie: {len(self.energy_orbs)}/{self.current_energy_orb_max}"
+        orb_cooldown = max(0, self.config.ENERGY_ORB_SPAWN_RATE - self.energy_orb_timer) / 60
+        orb_text = f"Boule d'énergie: {orb_cooldown:.1f}s ({len(self.energy_orbs)}/{self.config.ENERGY_ORB_MAX_COUNT})"
         orb_surface = self.small_font.render(orb_text, True, self.config.PURPLE)
         self.screen.blit(orb_surface, (10, 135))
         
@@ -541,10 +495,7 @@ class Game:
         self.enemy_spawn_delay = 120
         self.fire_timer = 0
         self.lightning_timer = 0  # Nouveau
-        
-        # Réinitialiser les capacités
-        self.current_energy_orb_max = self.config.ENERGY_ORB_MAX_COUNT_BASE
-        self.current_lightning_fire_rate = self.config.LIGHTNING_FIRE_RATE_BASE
+        self.energy_orb_timer = 0  # Nouveau
         
         # Réinitialiser le joueur
         self.player = Player(
@@ -559,9 +510,6 @@ class Game:
         self.lightnings.clear()  # Nouveau
         self.particles.clear()   # Nouveau
         self.energy_orbs.clear()  # Nouveau
-        
-        # Créer la première boule d'énergie
-        self.spawn_initial_energy_orb()
     
     def run(self):
         """Boucle principale du jeu"""
@@ -570,13 +518,3 @@ class Game:
             self.update()
             self.draw()
             self.clock.tick(self.config.FPS)
-    
-    def ensure_correct_orb_count(self):
-        """S'assure que le joueur a le bon nombre de boules d'énergie selon son niveau"""
-        # Utiliser directement current_energy_orb_max qui est mis à jour par update_abilities_progression
-        expected_orb_count = self.current_energy_orb_max
-        
-        # Ajouter des boules manquantes
-        while len(self.energy_orbs) < expected_orb_count:
-            self.spawn_energy_orb()
-            print(f"🔮 Boule d'énergie ajoutée par ensure_correct_orb_count ! Total: {len(self.energy_orbs)}/{expected_orb_count}")

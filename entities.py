@@ -300,11 +300,17 @@ class Particle:
 class EnergyOrb:
     """Classe pour les boules d'énergie qui orbitent autour du joueur"""
     
-    def __init__(self, player_x, player_y, start_angle, config):
+    def __init__(self, player_x, player_y, orb_index, total_orbs, config):
         self.config = config
         self.player_x = player_x
         self.player_y = player_y
-        self.angle = start_angle  # Angle de départ en radians
+        self.orb_index = orb_index
+        self.total_orbs = total_orbs
+        
+        # Calcul de l'angle de départ basé sur la répartition uniforme
+        self.base_angle = (orb_index * 2 * math.pi) / total_orbs
+        self.angle = self.base_angle
+        
         self.radius = config.ENERGY_ORB_RADIUS
         self.size = config.ENERGY_ORB_SIZE
         self.damage = config.ENERGY_ORB_DAMAGE
@@ -313,13 +319,12 @@ class EnergyOrb:
         self.x = player_x + math.cos(self.angle) * self.radius
         self.y = player_y + math.sin(self.angle) * self.radius
         
-        # Gestion de la vitesse variable
-        self.lifetime = config.ENERGY_ORB_LIFETIME
+        # Durée de vie infinie (les orbes persistent)
+        self.lifetime = float('inf')
         self.current_life = self.lifetime
-        self.fast_duration = config.ENERGY_ORB_FAST_DURATION
-        self.slow_duration = config.ENERGY_ORB_SLOW_DURATION
-        self.fast_speed = config.ENERGY_ORB_FAST_SPEED
-        self.slow_speed = config.ENERGY_ORB_SLOW_SPEED
+        
+        # Vitesse constante
+        self.angular_speed = config.ENERGY_ORB_SPEED
         
         # Effet de pulsation
         self.pulse_timer = 0
@@ -330,18 +335,8 @@ class EnergyOrb:
         self.player_x = player_x
         self.player_y = player_y
         
-        # Déterminer la vitesse selon le cycle de vie
-        time_alive = self.lifetime - self.current_life
-        
-        if time_alive < self.fast_duration:
-            # Phase rapide : 1 tour/seconde
-            angular_speed = self.fast_speed
-        else:
-            # Phase lente : 0.5 tour/seconde
-            angular_speed = self.slow_speed
-        
-        # Mise à jour de l'angle
-        self.angle += angular_speed
+        # Mise à jour de l'angle avec vitesse constante
+        self.angle += self.angular_speed
         
         # Garder l'angle dans [0, 2π]
         if self.angle > 2 * math.pi:
@@ -355,19 +350,26 @@ class EnergyOrb:
         self.pulse_timer += 1
         self.pulse_intensity = 0.8 + 0.2 * math.sin(self.pulse_timer * 0.2)
         
-        # Décrémentation de la durée de vie
-        self.current_life -= 1
+        # Les orbes persistent maintenant (pas de décrémentation de durée de vie)
+        return True  # Toujours retourner True pour maintenir l'orbe
+    
+    def update_formation(self, orb_index, total_orbs):
+        """Met à jour la formation quand le nombre d'orbes change"""
+        self.orb_index = orb_index
+        self.total_orbs = total_orbs
         
-        return self.current_life > 0
+        # Recalculer l'angle de base pour la nouvelle formation
+        new_base_angle = (orb_index * 2 * math.pi) / total_orbs
+        
+        # Ajuster l'angle actuel pour maintenir la rotation relative
+        angle_offset = self.angle - self.base_angle
+        self.base_angle = new_base_angle
+        self.angle = self.base_angle + angle_offset
     
     def draw(self, screen):
         """Dessine la boule d'énergie avec effet de lueur"""
-        if self.current_life <= 0:
-            return
-        
-        # Calcul de l'intensité basée sur la durée de vie
-        life_ratio = self.current_life / self.lifetime
-        intensity = life_ratio * self.pulse_intensity
+        # Intensité basée sur la pulsation (plus de diminution due à la durée de vie)
+        intensity = self.pulse_intensity
         
         # Couleurs avec intensité variable
         core_color = tuple(int(c * intensity) for c in self.config.ENERGY_ORB_COLOR)
