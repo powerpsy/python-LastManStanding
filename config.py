@@ -72,6 +72,20 @@ class Config:
             (255, 192, 203)  # Rose
         ]
         
+        # Paramètres des boules d'énergie orbitales (nouveau)
+        self.ENERGY_ORB_DAMAGE = 40  # Dégâts des boules d'énergie
+        self.ENERGY_ORB_SPAWN_RATE = 300  # 5 secondes à 60fps
+        self.ENERGY_ORB_LIFETIME = 600  # 10 secondes total à 60fps
+        self.ENERGY_ORB_FAST_DURATION = 300  # 5 secondes à vitesse rapide
+        self.ENERGY_ORB_SLOW_DURATION = 300  # 5 secondes à vitesse lente
+        self.ENERGY_ORB_FAST_SPEED = 2 * 3.14159 / 60  # 1 tour/seconde
+        self.ENERGY_ORB_SLOW_SPEED = 3.14159 / 60  # 0.5 tour/seconde
+        self.ENERGY_ORB_RADIUS = self.WINDOW_WIDTH * 0.08  # 8% de la largeur
+        self.ENERGY_ORB_SIZE = int(self.WINDOW_WIDTH * 0.01)  # 1% de la largeur
+        self.ENERGY_ORB_COLOR = (138, 43, 226)  # Violet/Pourpre
+        self.ENERGY_ORB_GLOW_COLOR = (255, 0, 255)  # Magenta lumineux
+        self.ENERGY_ORB_MAX_COUNT = 3  # Maximum 3 boules à la fois
+        
         # Interface utilisateur
         self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur
         self.HEALTH_BAR_HEIGHT = int(self.WINDOW_HEIGHT * 0.02)  # 2% de la hauteur

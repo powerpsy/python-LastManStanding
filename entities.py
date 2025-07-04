@@ -295,3 +295,95 @@ class Particle:
         
         # Dessiner la particule
         pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.size)
+
+
+class EnergyOrb:
+    """Classe pour les boules d'énergie qui orbitent autour du joueur"""
+    
+    def __init__(self, player_x, player_y, start_angle, config):
+        self.config = config
+        self.player_x = player_x
+        self.player_y = player_y
+        self.angle = start_angle  # Angle de départ en radians
+        self.radius = config.ENERGY_ORB_RADIUS
+        self.size = config.ENERGY_ORB_SIZE
+        self.damage = config.ENERGY_ORB_DAMAGE
+        
+        # Calcul de la position initiale
+        self.x = player_x + math.cos(self.angle) * self.radius
+        self.y = player_y + math.sin(self.angle) * self.radius
+        
+        # Gestion de la vitesse variable
+        self.lifetime = config.ENERGY_ORB_LIFETIME
+        self.current_life = self.lifetime
+        self.fast_duration = config.ENERGY_ORB_FAST_DURATION
+        self.slow_duration = config.ENERGY_ORB_SLOW_DURATION
+        self.fast_speed = config.ENERGY_ORB_FAST_SPEED
+        self.slow_speed = config.ENERGY_ORB_SLOW_SPEED
+        
+        # Effet de pulsation
+        self.pulse_timer = 0
+        self.pulse_intensity = 1.0
+    
+    def update(self, player_x, player_y):
+        """Met à jour la position de la boule d'énergie"""
+        self.player_x = player_x
+        self.player_y = player_y
+        
+        # Déterminer la vitesse selon le cycle de vie
+        time_alive = self.lifetime - self.current_life
+        
+        if time_alive < self.fast_duration:
+            # Phase rapide : 1 tour/seconde
+            angular_speed = self.fast_speed
+        else:
+            # Phase lente : 0.5 tour/seconde
+            angular_speed = self.slow_speed
+        
+        # Mise à jour de l'angle
+        self.angle += angular_speed
+        
+        # Garder l'angle dans [0, 2π]
+        if self.angle > 2 * math.pi:
+            self.angle -= 2 * math.pi
+        
+        # Calcul de la nouvelle position
+        self.x = player_x + math.cos(self.angle) * self.radius
+        self.y = player_y + math.sin(self.angle) * self.radius
+        
+        # Mise à jour de l'effet de pulsation
+        self.pulse_timer += 1
+        self.pulse_intensity = 0.8 + 0.2 * math.sin(self.pulse_timer * 0.2)
+        
+        # Décrémentation de la durée de vie
+        self.current_life -= 1
+        
+        return self.current_life > 0
+    
+    def draw(self, screen):
+        """Dessine la boule d'énergie avec effet de lueur"""
+        if self.current_life <= 0:
+            return
+        
+        # Calcul de l'intensité basée sur la durée de vie
+        life_ratio = self.current_life / self.lifetime
+        intensity = life_ratio * self.pulse_intensity
+        
+        # Couleurs avec intensité variable
+        core_color = tuple(int(c * intensity) for c in self.config.ENERGY_ORB_COLOR)
+        glow_color = tuple(int(c * intensity * 0.7) for c in self.config.ENERGY_ORB_GLOW_COLOR)
+        
+        # Dessiner l'aura (cercle plus grand, semi-transparent)
+        aura_size = int(self.size * 1.5)
+        pygame.draw.circle(screen, glow_color, (int(self.x), int(self.y)), aura_size)
+        
+        # Dessiner le noyau principal
+        pygame.draw.circle(screen, core_color, (int(self.x), int(self.y)), self.size)
+        
+        # Dessiner le point lumineux central
+        center_color = tuple(min(255, int(c * 1.2)) for c in self.config.WHITE)
+        pygame.draw.circle(screen, center_color, (int(self.x), int(self.y)), self.size // 2)
+    
+    def get_collision_rect(self):
+        """Retourne le rectangle de collision"""
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)

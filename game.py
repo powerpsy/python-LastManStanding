@@ -5,7 +5,7 @@ Moteur principal du jeu Last Man Standing
 import pygame
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle
+from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb
 
 class Game:
     """Classe principale du jeu"""
@@ -36,6 +36,7 @@ class Game:
         self.zaps = []
         self.lightnings = []  # Nouvelle liste pour les éclairs
         self.particles = []   # Nouvelle liste pour les particules
+        self.energy_orbs = []  # Nouvelle liste pour les boules d'énergie
         
         # Gestion des vagues d'ennemis
         self.wave_number = 1
@@ -49,6 +50,7 @@ class Game:
         # Tir automatique
         self.fire_timer = 0
         self.lightning_timer = 0  # Nouveau timer pour les éclairs
+        self.energy_orb_timer = 0  # Nouveau timer pour les boules d'énergie
     
     def handle_events(self):
         """Gère les événements pygame"""
@@ -136,6 +138,12 @@ class Game:
             self.auto_lightning()
             self.lightning_timer = 0
         
+        # Boules d'énergie automatiques (nouveau)
+        self.energy_orb_timer += 1
+        if self.energy_orb_timer >= self.config.ENERGY_ORB_SPAWN_RATE:
+            self.spawn_energy_orb()
+            self.energy_orb_timer = 0
+        
         # Met à jour les zaps
         for zap in self.zaps[:]:
             zap.update()
@@ -166,6 +174,29 @@ class Game:
         for particle in self.particles[:]:
             if not particle.update():
                 self.particles.remove(particle)
+        
+        # Met à jour les boules d'énergie (nouveau)
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        for orb in self.energy_orbs[:]:
+            if not orb.update(player_center_x, player_center_y):
+                self.energy_orbs.remove(orb)
+            else:
+                # Vérifier les collisions avec les ennemis
+                orb_rect = orb.get_collision_rect()
+                for enemy in self.enemies[:]:
+                    enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.size, enemy.size)
+                    if orb_rect.colliderect(enemy_rect):
+                        enemy.take_damage(self.config.ENERGY_ORB_DAMAGE)
+                        
+                        # Créer des particules d'explosion
+                        self.create_explosion_particles(orb.x, orb.y)
+                        
+                        if enemy.health <= 0:
+                            self.enemies.remove(enemy)
+                            self.score += 20  # Encore plus de points pour les boules d'énergie
+                        break
     
     def spawn_enemy(self):
         """Fait apparaître un ennemi sur le bord de l'écran"""
@@ -298,6 +329,10 @@ class Game:
             # Dessiner les particules (nouveau)
             for particle in self.particles:
                 particle.draw(self.screen)
+            
+            # Dessiner les boules d'énergie (nouveau)
+            for orb in self.energy_orbs:
+                orb.draw(self.screen)
         
         # Interface utilisateur
         self.draw_ui()
@@ -354,6 +389,12 @@ class Game:
         lightning_text = f"Éclair: {lightning_cooldown:.1f}s"
         lightning_surface = self.small_font.render(lightning_text, True, self.config.CYAN)
         self.screen.blit(lightning_surface, (10, 110))
+        
+        # Afficher le statut des boules d'énergie (nouveau)
+        orb_cooldown = max(0, self.config.ENERGY_ORB_SPAWN_RATE - self.energy_orb_timer) / 60
+        orb_text = f"Boule d'énergie: {orb_cooldown:.1f}s ({len(self.energy_orbs)}/{self.config.ENERGY_ORB_MAX_COUNT})"
+        orb_surface = self.small_font.render(orb_text, True, self.config.PURPLE)
+        self.screen.blit(orb_surface, (10, 135))
         
         # Score
         score_text = f"Score: {self.score}"
@@ -432,6 +473,7 @@ class Game:
         self.enemy_spawn_delay = 120
         self.fire_timer = 0
         self.lightning_timer = 0  # Nouveau
+        self.energy_orb_timer = 0  # Nouveau
         
         # Réinitialiser le joueur
         self.player = Player(
@@ -445,6 +487,22 @@ class Game:
         self.zaps.clear()
         self.lightnings.clear()  # Nouveau
         self.particles.clear()   # Nouveau
+        self.energy_orbs.clear()  # Nouveau
+    
+    def spawn_energy_orb(self):
+        """Fait apparaître une boule d'énergie si le maximum n'est pas atteint"""
+        if len(self.energy_orbs) >= self.config.ENERGY_ORB_MAX_COUNT:
+            return
+        
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        # Calculer l'angle de départ pour espacer les boules
+        start_angle = len(self.energy_orbs) * (2 * math.pi / self.config.ENERGY_ORB_MAX_COUNT)
+        
+        # Créer la nouvelle boule d'énergie
+        orb = EnergyOrb(player_center_x, player_center_y, start_angle, self.config)
+        self.energy_orbs.append(orb)
     
     def run(self):
         """Boucle principale du jeu"""
