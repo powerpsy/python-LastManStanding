@@ -106,7 +106,7 @@ class Game:
                 int(self.base_spawn_delay * reduction_factor)
             )
             
-            print(f"🌊 Vague {self.wave_number} - {self.enemies_per_wave} ennemis - Délai: {self.enemy_spawn_delay/60:.1f}s")
+            print(f"🌊 Vague {self.wave_number} - {self.enemies_per_wave} ennemis")
             print(f"⚡ Capacités: {len(self.energy_orbs)}/{self.current_energy_orb_max} orbes, Éclair: {self.current_lightning_fire_rate/60:.1f}s")
         
         # Spawn d'un nouvel ennemi si nécessaire
@@ -183,8 +183,6 @@ class Game:
         for orb in self.energy_orbs[:]:
             if not orb.update(player_center_x, player_center_y):
                 self.energy_orbs.remove(orb)
-                # Les orbes étant permanentes, cela ne devrait plus arriver
-                print("⚠️ Orbe supprimée de manière inattendue")
             else:
                 # Vérifier les collisions avec les ennemis
                 orb_rect = orb.get_collision_rect()
@@ -235,26 +233,36 @@ class Game:
         if not self.enemies:
             return
         
-        # Trouver l'ennemi le plus proche
         player_center_x = self.player.x + self.player.size // 2
         player_center_y = self.player.y + self.player.size // 2
         
-        closest_enemy = min(self.enemies, key=lambda e: 
-            math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
+        # Trouver l'ennemi le plus proche (optimisé)
+        min_distance_sq = float('inf')
+        closest_enemy = None
         
-        # Calculer la direction vers l'ennemi
-        dx = closest_enemy.x - player_center_x
-        dy = closest_enemy.y - player_center_y
-        distance = math.sqrt(dx**2 + dy**2)
-        
-        if distance > 0:
-            # Normaliser la direction
-            dx /= distance
-            dy /= distance
+        for enemy in self.enemies:
+            dx = enemy.x - player_center_x
+            dy = enemy.y - player_center_y
+            distance_sq = dx * dx + dy * dy  # Éviter sqrt pour la performance
             
-            # Créer le zap
-            zap = Zap(player_center_x, player_center_y, dx, dy, self.config)
-            self.zaps.append(zap)
+            if distance_sq < min_distance_sq:
+                min_distance_sq = distance_sq
+                closest_enemy = enemy
+        
+        if closest_enemy:
+            # Calculer la direction vers l'ennemi
+            dx = closest_enemy.x - player_center_x
+            dy = closest_enemy.y - player_center_y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance > 0:
+                # Normaliser la direction
+                dx /= distance
+                dy /= distance
+                
+                # Créer le zap
+                zap = Zap(player_center_x, player_center_y, dx, dy, self.config)
+                self.zaps.append(zap)
     
     def auto_lightning(self):
         """Lance un éclair automatique si un ennemi est à portée"""
@@ -305,7 +313,6 @@ class Game:
         if target.health <= 0:
             self.enemies.remove(target)
             self.score += 15 if is_primary else 10  # Moins de points pour les cibles secondaires
-            print(f"⚡ Ennemi éliminé par éclair {'principal' if is_primary else 'chaîné'}")
         
         # Chaînage uniquement pour l'éclair principal
         if is_primary and random.random() < self.config.LIGHTNING_CHAIN_CHANCE:
@@ -330,8 +337,6 @@ class Game:
                 secondary_target = min(secondary_targets, key=lambda e: 
                     math.sqrt((e.x + e.size//2 - target_x)**2 + (e.y + e.size//2 - target_y)**2))
                 
-                print(f"⚡ Éclair chaîné ! ({len(secondary_targets)} cibles possibles)")
-                
                 # Traiter l'éclair secondaire (sans chaînage supplémentaire)
                 self.process_lightning_strike(target_x, target_y, secondary_target, False)
     
@@ -342,29 +347,18 @@ class Game:
             expected_orbs = min(self.wave_number, self.config.ENERGY_ORB_MAX_COUNT_FINAL)
             
             if expected_orbs > self.current_energy_orb_max:
-                old_max = self.current_energy_orb_max
                 self.current_energy_orb_max = expected_orbs
-                print(f"🔮 Niveau {self.wave_number}: Boules d'énergie {old_max} → {self.current_energy_orb_max}")
-                
-                # Supprimer toutes les orbes existantes
+                # Supprimer toutes les orbes existantes et les recréer
                 self.energy_orbs.clear()
-                print(f"🔮 Suppression des {old_max} orbes existantes")
-                
-                # Recréer toutes les orbes avec les bonnes positions
                 self.recreate_all_energy_orbs()
-                print(f"🔮 Recréation de {self.current_energy_orb_max} orbes avec positions optimales")
         
-        # Améliorer la vitesse des éclairs tous les 5 niveaux (comme avant)
+        # Améliorer la vitesse des éclairs tous les 5 niveaux
         if self.wave_number % 5 == 0:
-            # Réduire le délai des éclairs (améliorer la cadence)
             if self.current_lightning_fire_rate > self.config.LIGHTNING_FIRE_RATE_MIN:
-                old_rate = self.current_lightning_fire_rate
-                # Réduction de 0.1s (6 frames à 60fps)
                 self.current_lightning_fire_rate = max(
                     self.config.LIGHTNING_FIRE_RATE_MIN,
                     self.current_lightning_fire_rate - 6
                 )
-                print(f"⚡ Amélioration niveau {self.wave_number}: Éclairs {old_rate/60:.1f}s → {self.current_lightning_fire_rate/60:.1f}s")
     
     def create_explosion_particles(self, x, y):
         """Crée des particules d'explosion à la position donnée"""
@@ -434,37 +428,32 @@ class Game:
         
         # Barre de santé actuelle
         health_width = int(self.config.HEALTH_BAR_WIDTH * health_ratio)
-        health_rect = pygame.Rect(10, 10, health_width, self.config.HEALTH_BAR_HEIGHT)
-        pygame.draw.rect(self.screen, health_color, health_rect)
+        if health_width > 0:
+            health_rect = pygame.Rect(10, 10, health_width, self.config.HEALTH_BAR_HEIGHT)
+            pygame.draw.rect(self.screen, health_color, health_rect)
         
         # Contour de la barre
         pygame.draw.rect(self.screen, self.config.WHITE, health_bg_rect, 2)
         
-        # Texte de santé
+        # Textes (pré-calculer les surfaces)
         health_text = f"HP: {self.player.health}/{self.player.max_health}"
         health_surface = self.small_font.render(health_text, True, self.config.WHITE)
         self.screen.blit(health_surface, (10, 35))
         
-        # Informations de vague avec délai
         wave_text = f"Vague {self.wave_number} - Ennemis: {len(self.enemies)}"
         wave_surface = self.font.render(wave_text, True, self.config.WHITE)
         self.screen.blit(wave_surface, (10, 60))
         
-        # Afficher le délai actuel pour feedback
-        delay_text = f"Délai spawn: {self.enemy_spawn_delay/60:.1f}s"
-        delay_surface = self.small_font.render(delay_text, True, self.config.GRAY)
-        self.screen.blit(delay_surface, (10, 85))
-        
-        # Afficher le statut des éclairs (nouveau)
+        # Afficher le statut des éclairs
         lightning_cooldown = max(0, self.current_lightning_fire_rate - self.lightning_timer) / 60
         lightning_text = f"Éclair: {lightning_cooldown:.1f}s (Chaîne: {self.config.LIGHTNING_CHAIN_CHANCE*100:.0f}%)"
         lightning_surface = self.small_font.render(lightning_text, True, self.config.CYAN)
-        self.screen.blit(lightning_surface, (10, 110))
+        self.screen.blit(lightning_surface, (10, 85))
         
-        # Afficher le statut des boules d'énergie (nouveau)
+        # Afficher le statut des boules d'énergie
         orb_text = f"Boules d'énergie: {len(self.energy_orbs)}/{self.current_energy_orb_max}"
         orb_surface = self.small_font.render(orb_text, True, self.config.PURPLE)
-        self.screen.blit(orb_surface, (10, 135))
+        self.screen.blit(orb_surface, (10, 110))
         
         # Score
         score_text = f"Score: {self.score}"
@@ -579,7 +568,6 @@ class Game:
         
         # Si le nombre d'orbes ne correspond pas, les recréer toutes
         if len(self.energy_orbs) != expected_orb_count:
-            print(f"🔮 Correction du nombre d'orbes : {len(self.energy_orbs)} → {expected_orb_count}")
             self.energy_orbs.clear()
             self.recreate_all_energy_orbs()
     
@@ -592,4 +580,3 @@ class Game:
         for i in range(self.current_energy_orb_max):
             orb = EnergyOrb(player_center_x, player_center_y, i, self.current_energy_orb_max, self.config)
             self.energy_orbs.append(orb)
-            print(f"🔮 Orbe #{i+1}/{self.current_energy_orb_max} créée à l'angle {(i * 360 / self.current_energy_orb_max):.1f}°")
