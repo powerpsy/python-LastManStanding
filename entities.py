@@ -174,13 +174,14 @@ class Zap:
 class Lightning:
     """Classe pour les éclairs instantanés"""
     
-    def __init__(self, start_x, start_y, target_x, target_y, config):
+    def __init__(self, start_x, start_y, target_x, target_y, config, is_chained=False):
         self.start_x = start_x
         self.start_y = start_y
         self.target_x = target_x
         self.target_y = target_y
         self.config = config
         self.damage = config.LIGHTNING_DAMAGE
+        self.is_chained = is_chained  # Nouveau paramètre
         
         # Durée d'affichage
         self.lifetime = config.LIGHTNING_DISPLAY_TIME
@@ -225,19 +226,27 @@ class Lightning:
         # Intensité basée sur la durée de vie restante
         intensity = self.current_life / self.lifetime
         
-        # Couleur qui s'estompe
-        color = tuple(int(c * intensity) for c in self.config.LIGHTNING_COLOR)
-        secondary_color = tuple(int(c * intensity) for c in self.config.LIGHTNING_SECONDARY_COLOR)
+        # Couleurs différentes selon le type d'éclair
+        if self.is_chained:
+            # Éclair chaîné : couleur violette/magenta
+            color = tuple(int(c * intensity) for c in (255, 100, 255))
+            secondary_color = tuple(int(c * intensity) for c in (200, 50, 200))
+            thickness = 2  # Plus fin
+        else:
+            # Éclair principal : couleur blanche/bleue
+            color = tuple(int(c * intensity) for c in self.config.LIGHTNING_COLOR)
+            secondary_color = tuple(int(c * intensity) for c in self.config.LIGHTNING_SECONDARY_COLOR)
+            thickness = 3  # Plus épais
         
         # Dessiner les segments de l'éclair
         for i in range(len(self.points) - 1):
             start_point = (int(self.points[i][0]), int(self.points[i][1]))
             end_point = (int(self.points[i + 1][0]), int(self.points[i + 1][1]))
             
-            # Ligne principale (épaisse)
-            pygame.draw.line(screen, color, start_point, end_point, 3)
+            # Ligne principale
+            pygame.draw.line(screen, color, start_point, end_point, thickness)
             
-            # Ligne secondaire (fine) pour l'effet de lueur
+            # Ligne secondaire pour l'effet de lueur
             pygame.draw.line(screen, secondary_color, start_point, end_point, 1)
 
 

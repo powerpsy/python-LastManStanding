@@ -59,6 +59,9 @@ class Config:
         self.LIGHTNING_DISPLAY_TIME = 6  # 0.1 seconde à 60fps
         self.LIGHTNING_COLOR = (255, 255, 255)  # Blanc éclatant
         self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)  # Bleu clair
+        self.LIGHTNING_CHAIN_CHANCE = 0.5  # 50% de chance de chaîner sur un second ennemi
+        self.LIGHTNING_CHAIN_RANGE = self.WINDOW_WIDTH * 0.2  # 20% de la largeur pour le chaînage
+        self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)  # Bleu clair
         
         # Paramètres des particules d'explosion
         self.PARTICLE_COUNT = 8  # Nombre de particules par explosion
@@ -75,15 +78,14 @@ class Config:
         
         # Paramètres des boules d'énergie orbitales (nouveau)
         self.ENERGY_ORB_DAMAGE = 40  # Dégâts des boules d'énergie
-        self.ENERGY_ORB_SPAWN_RATE = 300  # 5 secondes à 60fps
-        self.ENERGY_ORB_LIFETIME = 600  # 10 secondes total à 60fps
         self.ENERGY_ORB_SPEED = 2 * 3.14159 / 60  # 1 tour/seconde constant
         self.ENERGY_ORB_RADIUS = self.WINDOW_WIDTH * 0.08  # 8% de la largeur
         self.ENERGY_ORB_SIZE = int(self.WINDOW_WIDTH * 0.01)  # 1% de la largeur
         self.ENERGY_ORB_COLOR = (138, 43, 226)  # Violet/Pourpre
         self.ENERGY_ORB_GLOW_COLOR = (255, 0, 255)  # Magenta lumineux
-        self.ENERGY_ORB_MAX_COUNT_BASE = 1  # Nombre de départ
-        self.ENERGY_ORB_MAX_COUNT_FINAL = 6  # Maximum final possible
+        self.ENERGY_ORB_MAX_COUNT_BASE = 1  # Nombre de départ (niveau 1)
+        self.ENERGY_ORB_MAX_COUNT_FINAL = 7  # Maximum final possible (niveau 7)
+        self.ENERGY_ORB_PROGRESSION_INTERVAL = 1  # Nouvelle orbe à chaque niveau
         
         # Interface utilisateur
         self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur

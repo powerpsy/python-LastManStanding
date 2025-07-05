@@ -51,8 +51,8 @@ class Game:
         self.current_energy_orb_max = config.ENERGY_ORB_MAX_COUNT_BASE  # Commence avec 1 boule
         self.current_lightning_fire_rate = config.LIGHTNING_FIRE_RATE_BASE  # Commence avec 1s
         
-        # Créer la première boule d'énergie au début
-        self.spawn_initial_energy_orb()
+        # Créer les orbes d'énergie initiales
+        self.recreate_all_energy_orbs()
     
     def handle_events(self):
         """Gère les événements pygame"""
@@ -183,8 +183,8 @@ class Game:
         for orb in self.energy_orbs[:]:
             if not orb.update(player_center_x, player_center_y):
                 self.energy_orbs.remove(orb)
-                # Réorganiser les boules restantes
-                self.reorganize_energy_orbs()
+                # Les orbes étant permanentes, cela ne devrait plus arriver
+                print("⚠️ Orbe supprimée de manière inattendue")
             else:
                 # Vérifier les collisions avec les ennemis
                 orb_rect = orb.get_collision_rect()
@@ -200,12 +200,6 @@ class Game:
                             self.enemies.remove(enemy)
                             self.score += 20  # Encore plus de points pour les boules d'énergie
                         break
-    
-    def reorganize_energy_orbs(self):
-        """Réorganise les boules d'énergie après la suppression d'une boule"""
-        total_orbs = len(self.energy_orbs)
-        for i, orb in enumerate(self.energy_orbs):
-            orb.update_formation(i, total_orbs)
     
     def spawn_enemy(self):
         """Fait apparaître un ennemi sur le bord de l'écran"""
@@ -284,72 +278,84 @@ class Game:
         
         if enemies_in_range:
             # Choisir un ennemi aléatoire dans la portée
-            target = random.choice(enemies_in_range)
-            target_x = target.x + target.size // 2
-            target_y = target.y + target.size // 2
+            primary_target = random.choice(enemies_in_range)
             
-            # Créer l'éclair
-            lightning = Lightning(player_center_x, player_center_y, 
-                                target_x, target_y, self.config)
-            self.lightnings.append(lightning)
-            
-            # Infliger des dégâts immédiatement
-            target.take_damage(self.config.LIGHTNING_DAMAGE)
-            
-            # Créer les particules d'explosion
-            self.create_explosion_particles(target_x, target_y)
-            
-            # Retirer l'ennemi s'il est mort
-            if target.health <= 0:
-                self.enemies.remove(target)
-                self.score += 15  # Plus de points pour l'éclair
+            # Traiter l'éclair principal
+            self.process_lightning_strike(player_center_x, player_center_y, primary_target, True)
     
-    def spawn_energy_orb(self):
-        """Fait apparaître une boule d'énergie si le maximum n'est pas atteint"""
-        if len(self.energy_orbs) >= self.current_energy_orb_max:
+    def process_lightning_strike(self, start_x, start_y, target, is_primary=False):
+        """Traite un éclair individuel et gère le chaînage"""
+        if not target or target not in self.enemies:
             return
         
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
+        target_x = target.x + target.size // 2
+        target_y = target.y + target.size // 2
         
-        # Index de la nouvelle boule
-        orb_index = len(self.energy_orbs)
-        total_orbs = orb_index + 1
+        # Créer l'éclair visuel
+        lightning = Lightning(start_x, start_y, target_x, target_y, self.config, not is_primary)
+        self.lightnings.append(lightning)
         
-        # Créer la nouvelle boule d'énergie avec répartition uniforme
-        orb = EnergyOrb(player_center_x, player_center_y, orb_index, total_orbs, self.config)
-        self.energy_orbs.append(orb)
+        # Infliger des dégâts
+        target.take_damage(self.config.LIGHTNING_DAMAGE)
         
-        print(f"🔮 Orbe #{total_orbs} créée ! Total: {len(self.energy_orbs)}/{self.current_energy_orb_max}")
+        # Créer les particules d'explosion
+        self.create_explosion_particles(target_x, target_y)
         
-        # Mettre à jour la formation de toutes les boules existantes
-        for i, existing_orb in enumerate(self.energy_orbs):
-            existing_orb.update_formation(i, total_orbs)
-    
-    def spawn_initial_energy_orb(self):
-        """Créer la première boule d'énergie au début du jeu"""
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
+        # Points et suppression si mort
+        if target.health <= 0:
+            self.enemies.remove(target)
+            self.score += 15 if is_primary else 10  # Moins de points pour les cibles secondaires
+            print(f"⚡ Ennemi éliminé par éclair {'principal' if is_primary else 'chaîné'}")
         
-        orb = EnergyOrb(player_center_x, player_center_y, 0, 1, self.config)
-        self.energy_orbs.append(orb)
+        # Chaînage uniquement pour l'éclair principal
+        if is_primary and random.random() < self.config.LIGHTNING_CHAIN_CHANCE:
+            # Chercher un second ennemi à portée de chaînage
+            secondary_targets = []
+            for enemy in self.enemies:
+                if enemy == target:  # Ne pas cibler le même ennemi
+                    continue
+                
+                enemy_center_x = enemy.x + enemy.size // 2
+                enemy_center_y = enemy.y + enemy.size // 2
+                
+                # Distance depuis la cible primaire
+                distance = math.sqrt((enemy_center_x - target_x)**2 + 
+                                   (enemy_center_y - target_y)**2)
+                
+                if distance <= self.config.LIGHTNING_CHAIN_RANGE:
+                    secondary_targets.append(enemy)
+            
+            if secondary_targets:
+                # Choisir la cible secondaire la plus proche
+                secondary_target = min(secondary_targets, key=lambda e: 
+                    math.sqrt((e.x + e.size//2 - target_x)**2 + (e.y + e.size//2 - target_y)**2))
+                
+                print(f"⚡ Éclair chaîné ! ({len(secondary_targets)} cibles possibles)")
+                
+                # Traiter l'éclair secondaire (sans chaînage supplémentaire)
+                self.process_lightning_strike(target_x, target_y, secondary_target, False)
     
     def update_abilities_progression(self):
-        """Met à jour les capacités du joueur tous les 5 niveaux"""
-        if self.wave_number % 5 == 0:  # Tous les 5 niveaux
-            # Augmenter le nombre max de boules d'énergie
-            if self.current_energy_orb_max < self.config.ENERGY_ORB_MAX_COUNT_FINAL:
-                old_max = self.current_energy_orb_max
-                self.current_energy_orb_max += 1
-                print(f"🔮 Amélioration niveau {self.wave_number}: Boules d'énergie {old_max} → {self.current_energy_orb_max} (max: {self.config.ENERGY_ORB_MAX_COUNT_FINAL})")
-                
-                # Ajouter immédiatement la nouvelle boule d'énergie
-                if len(self.energy_orbs) < self.current_energy_orb_max:
-                    self.spawn_energy_orb()
-                    print(f"🔮 Boule d'énergie #{len(self.energy_orbs)} créée instantanément ! Total actuel: {len(self.energy_orbs)}")
-            else:
-                print(f"🔮 Niveau {self.wave_number}: Nombre max de boules d'énergie déjà atteint ({self.current_energy_orb_max})")
+        """Met à jour les capacités du joueur"""
+        # Progression des orbes d'énergie : 1 orbe par niveau jusqu'au niveau 7
+        if self.wave_number <= 7:
+            expected_orbs = min(self.wave_number, self.config.ENERGY_ORB_MAX_COUNT_FINAL)
             
+            if expected_orbs > self.current_energy_orb_max:
+                old_max = self.current_energy_orb_max
+                self.current_energy_orb_max = expected_orbs
+                print(f"🔮 Niveau {self.wave_number}: Boules d'énergie {old_max} → {self.current_energy_orb_max}")
+                
+                # Supprimer toutes les orbes existantes
+                self.energy_orbs.clear()
+                print(f"🔮 Suppression des {old_max} orbes existantes")
+                
+                # Recréer toutes les orbes avec les bonnes positions
+                self.recreate_all_energy_orbs()
+                print(f"🔮 Recréation de {self.current_energy_orb_max} orbes avec positions optimales")
+        
+        # Améliorer la vitesse des éclairs tous les 5 niveaux (comme avant)
+        if self.wave_number % 5 == 0:
             # Réduire le délai des éclairs (améliorer la cadence)
             if self.current_lightning_fire_rate > self.config.LIGHTNING_FIRE_RATE_MIN:
                 old_rate = self.current_lightning_fire_rate
@@ -359,10 +365,6 @@ class Game:
                     self.current_lightning_fire_rate - 6
                 )
                 print(f"⚡ Amélioration niveau {self.wave_number}: Éclairs {old_rate/60:.1f}s → {self.current_lightning_fire_rate/60:.1f}s")
-            else:
-                print(f"⚡ Niveau {self.wave_number}: Vitesse max des éclairs déjà atteinte ({self.current_lightning_fire_rate/60:.1f}s)")
-        else:
-            print(f"📊 Niveau {self.wave_number}: Pas d'amélioration (prochaine au niveau {((self.wave_number // 5) + 1) * 5})")
     
     def create_explosion_particles(self, x, y):
         """Crée des particules d'explosion à la position donnée"""
@@ -455,7 +457,7 @@ class Game:
         
         # Afficher le statut des éclairs (nouveau)
         lightning_cooldown = max(0, self.current_lightning_fire_rate - self.lightning_timer) / 60
-        lightning_text = f"Éclair: {lightning_cooldown:.1f}s"
+        lightning_text = f"Éclair: {lightning_cooldown:.1f}s (Chaîne: {self.config.LIGHTNING_CHAIN_CHANCE*100:.0f}%)"
         lightning_surface = self.small_font.render(lightning_text, True, self.config.CYAN)
         self.screen.blit(lightning_surface, (10, 110))
         
@@ -560,8 +562,8 @@ class Game:
         self.particles.clear()   # Nouveau
         self.energy_orbs.clear()  # Nouveau
         
-        # Créer la première boule d'énergie
-        self.spawn_initial_energy_orb()
+        # Créer les orbes d'énergie initiales
+        self.recreate_all_energy_orbs()
     
     def run(self):
         """Boucle principale du jeu"""
@@ -573,10 +575,21 @@ class Game:
     
     def ensure_correct_orb_count(self):
         """S'assure que le joueur a le bon nombre de boules d'énergie selon son niveau"""
-        # Utiliser directement current_energy_orb_max qui est mis à jour par update_abilities_progression
         expected_orb_count = self.current_energy_orb_max
         
-        # Ajouter des boules manquantes
-        while len(self.energy_orbs) < expected_orb_count:
-            self.spawn_energy_orb()
-            print(f"🔮 Boule d'énergie ajoutée par ensure_correct_orb_count ! Total: {len(self.energy_orbs)}/{expected_orb_count}")
+        # Si le nombre d'orbes ne correspond pas, les recréer toutes
+        if len(self.energy_orbs) != expected_orb_count:
+            print(f"🔮 Correction du nombre d'orbes : {len(self.energy_orbs)} → {expected_orb_count}")
+            self.energy_orbs.clear()
+            self.recreate_all_energy_orbs()
+    
+    def recreate_all_energy_orbs(self):
+        """Recrée toutes les orbes d'énergie avec les positions optimales"""
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        # Créer toutes les orbes avec une répartition uniforme
+        for i in range(self.current_energy_orb_max):
+            orb = EnergyOrb(player_center_x, player_center_y, i, self.current_energy_orb_max, self.config)
+            self.energy_orbs.append(orb)
+            print(f"🔮 Orbe #{i+1}/{self.current_energy_orb_max} créée à l'angle {(i * 360 / self.current_energy_orb_max):.1f}°")
