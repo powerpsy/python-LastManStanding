@@ -276,7 +276,7 @@ class Lightning:
         self.current_life -= 1
         return self.current_life > 0
     
-    def draw(self, screen):
+    def draw(self, screen, camera_x=0, camera_y=0):
         """Dessine l'éclair avec effet de zigzag"""
         if self.current_life <= 0:
             return
@@ -296,10 +296,10 @@ class Lightning:
             secondary_color = tuple(int(c * intensity) for c in self.config.LIGHTNING_SECONDARY_COLOR)
             thickness = 3  # Plus épais
         
-        # Dessiner les segments de l'éclair
+        # Dessiner les segments de l'éclair avec ajustement de caméra
         for i in range(len(self.points) - 1):
-            start_point = (int(self.points[i][0]), int(self.points[i][1]))
-            end_point = (int(self.points[i + 1][0]), int(self.points[i + 1][1]))
+            start_point = (int(self.points[i][0] - camera_x), int(self.points[i][1] - camera_y))
+            end_point = (int(self.points[i + 1][0] - camera_x), int(self.points[i + 1][1] - camera_y))
             
             # Ligne principale
             pygame.draw.line(screen, color, start_point, end_point, thickness)

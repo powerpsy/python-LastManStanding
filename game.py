@@ -2,6 +2,7 @@ import pygame
 import random
 import math
 from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb
+from background import Background
 
 class Game:
     """Classe principale du jeu"""
@@ -51,6 +52,30 @@ class Game:
         self.current_energy_orb_max = config.ENERGY_ORB_MAX_COUNT_BASE  # Commence avec 1 boule
         self.current_lightning_fire_rate = config.LIGHTNING_FIRE_RATE_BASE  # Commence avec 1s
         
+        # Système de caméra avec délai
+        self.camera_x = 0
+        self.camera_y = 0
+        self.camera_target_x = 0
+        self.camera_target_y = 0
+        self.camera_delay_timer = 0
+        self.camera_delay_duration = 12  # 0.2s à 60fps
+        self.camera_follow_speed = 0.08  # Vitesse de suivi de la caméra (0.08 = 8%)
+        
+        # Créer l'arrière-plan procédural
+        self.background = Background(config)
+        
+        # Placer le joueur au centre du monde généré
+        world_bounds = self.background.get_world_bounds()
+        self.player.x = world_bounds['max_x'] // 2
+        self.player.y = world_bounds['max_y'] // 2
+        
+        # Initialiser la caméra centrée sur le joueur
+        self.camera_x = self.player.x + self.player.size // 2 - self.config.WINDOW_WIDTH // 2
+        self.camera_y = self.player.y + self.player.size // 2 - self.config.WINDOW_HEIGHT // 2
+        # Contraindre la caméra dans les limites du monde
+        self.camera_x = max(0, min(self.camera_x, world_bounds['max_x'] - self.config.WINDOW_WIDTH))
+        self.camera_y = max(0, min(self.camera_y, world_bounds['max_y'] - self.config.WINDOW_HEIGHT))
+        
         # Créer les orbes d'énergie initiales
         self.recreate_all_energy_orbs()
     
@@ -75,18 +100,15 @@ class Game:
         
         # Met à jour le joueur
         keys = pygame.key.get_pressed()
+        player_was_moving = self.player.vel_x != 0 or self.player.vel_y != 0
         self.player.update(keys)
+        player_is_moving = self.player.vel_x != 0 or self.player.vel_y != 0
         
-        # Vérifier les limites d'écran pour le joueur
-        if self.player.x < 0:
-            self.player.x = 0
-        elif self.player.x > self.config.WINDOW_WIDTH - self.player.size:
-            self.player.x = self.config.WINDOW_WIDTH - self.player.size
+        # Contraindre le joueur dans les limites du monde généré
+        self.background.constrain_player(self.player)
         
-        if self.player.y < 0:
-            self.player.y = 0
-        elif self.player.y > self.config.WINDOW_HEIGHT - self.player.size:
-            self.player.y = self.config.WINDOW_HEIGHT - self.player.size
+        # Mise à jour de la caméra avec délai
+        self.update_camera(player_was_moving, player_is_moving)
         
         # Spawn des ennemis par vagues avec délai décroissant
         if len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
@@ -119,24 +141,20 @@ class Game:
         
         # Met à jour les ennemis
         for enemy in self.enemies[:]:
-            enemy.update(self.player.x + self.player.size//2, 
-                        self.player.y + self.player.size//2)
+            enemy.update(self.player.x, self.player.y)
             
             # Collision avec le joueur
             if self.check_collision(self.player, enemy):
-                self.player.take_damage(self.config.ENEMY_DAMAGE)
-                self.enemies.remove(enemy)
-                
-                if self.player.health <= 0:
-                    self.game_over = True
+                self.game_over = True
+                break
         
-        # Tir automatique (zaps)
+        # Tir automatique (restauré)
         self.fire_timer += 1
         if self.fire_timer >= self.config.ZAP_FIRE_RATE and self.enemies:
             self.auto_fire()
             self.fire_timer = 0
         
-        # Éclairs automatiques (nouveau)
+        # Éclairs automatiques (restauré)
         self.lightning_timer += 1
         if self.lightning_timer >= self.current_lightning_fire_rate:
             self.auto_lightning()
@@ -149,9 +167,12 @@ class Game:
         for zap in self.zaps[:]:
             zap.update()
             
-            # Retirer les zaps qui sortent de l'écran
-            if (zap.x < 0 or zap.x > self.config.WINDOW_WIDTH or 
-                zap.y < 0 or zap.y > self.config.WINDOW_HEIGHT):
+            # Retirer les zaps qui sortent de la zone de caméra étendue
+            margin = 200  # Marge pour garder les projectiles un peu plus longtemps
+            if (zap.x < self.camera_x - margin or 
+                zap.x > self.camera_x + self.config.WINDOW_WIDTH + margin or 
+                zap.y < self.camera_y - margin or 
+                zap.y > self.camera_y + self.config.WINDOW_HEIGHT + margin):
                 self.zaps.remove(zap)
                 continue
             
@@ -166,179 +187,97 @@ class Game:
                         self.score += 10
                     break
         
-        # Met à jour les éclairs (nouveau)
+        # Met à jour les éclairs
         for lightning in self.lightnings[:]:
             if not lightning.update():
                 self.lightnings.remove(lightning)
         
-        # Met à jour les particules (nouveau)
+        # Met à jour les particules
         for particle in self.particles[:]:
             if not particle.update():
                 self.particles.remove(particle)
         
-        # Met à jour les boules d'énergie (nouveau)
+        # Met à jour les boules d'énergie (avant le rendu pour éviter les interférences)
         player_center_x = self.player.x + self.player.size // 2
         player_center_y = self.player.y + self.player.size // 2
         
         for orb in self.energy_orbs[:]:
             if not orb.update(player_center_x, player_center_y):
                 self.energy_orbs.remove(orb)
-            else:
-                # Vérifier les collisions avec les ennemis
-                orb_rect = orb.get_collision_rect()
-                for enemy in self.enemies[:]:
-                    enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.size, enemy.size)
-                    if orb_rect.colliderect(enemy_rect):
-                        enemy.take_damage(self.config.ENERGY_ORB_DAMAGE)
-                        
-                        # Créer des particules d'explosion
-                        self.create_explosion_particles(orb.x, orb.y)
-                        
-                        if enemy.health <= 0:
-                            self.enemies.remove(enemy)
-                            self.score += 20  # Encore plus de points pour les boules d'énergie
-                        break
     
     def spawn_enemy(self):
-        """Fait apparaître un ennemi sur le bord de l'écran"""
-        side = random.randint(0, 3)  # 0=haut, 1=droite, 2=bas, 3=gauche
+        """Crée un nouvel ennemi juste en dehors de la zone de caméra visible"""
+        world_bounds = self.background.get_world_bounds()
+        
+        # Calculer la zone visible actuelle de la caméra
+        camera_left = int(self.camera_x)
+        camera_right = int(self.camera_x + self.config.WINDOW_WIDTH)
+        camera_top = int(self.camera_y)
+        camera_bottom = int(self.camera_y + self.config.WINDOW_HEIGHT)
+        
+        # Distance en dehors de l'écran (environ 2 tiles de 32px = 64px)
+        spawn_margin = 64
+        
+        # Choisir un côté aléatoire pour faire apparaître l'ennemi
+        side = random.randint(0, 3)
         
         if side == 0:  # Haut
-            x = random.randint(0, self.config.WINDOW_WIDTH - self.config.ENEMY_SIZE)
-            y = -self.config.ENEMY_SIZE
+            x = random.randint(max(0, camera_left - spawn_margin), 
+                             min(world_bounds['max_x'], camera_right + spawn_margin))
+            y = max(0, camera_top - spawn_margin - random.randint(0, spawn_margin))
+            
         elif side == 1:  # Droite
-            x = self.config.WINDOW_WIDTH
-            y = random.randint(0, self.config.WINDOW_HEIGHT - self.config.ENEMY_SIZE)
+            x = min(world_bounds['max_x'], camera_right + spawn_margin + random.randint(0, spawn_margin))
+            y = random.randint(max(0, camera_top - spawn_margin), 
+                             min(world_bounds['max_y'], camera_bottom + spawn_margin))
+            
         elif side == 2:  # Bas
-            x = random.randint(0, self.config.WINDOW_WIDTH - self.config.ENEMY_SIZE)
-            y = self.config.WINDOW_HEIGHT
+            x = random.randint(max(0, camera_left - spawn_margin), 
+                             min(world_bounds['max_x'], camera_right + spawn_margin))
+            y = min(world_bounds['max_y'], camera_bottom + spawn_margin + random.randint(0, spawn_margin))
+            
         else:  # Gauche
-            x = -self.config.ENEMY_SIZE
-            y = random.randint(0, self.config.WINDOW_HEIGHT - self.config.ENEMY_SIZE)
+            x = max(0, camera_left - spawn_margin - random.randint(0, spawn_margin))
+            y = random.randint(max(0, camera_top - spawn_margin), 
+                             min(world_bounds['max_y'], camera_bottom + spawn_margin))
         
-        # Augmenter la santé des ennemis avec les vagues
-        enemy_health = self.config.ENEMY_HEALTH + (self.wave_number - 1) * 5
+        # S'assurer que les coordonnées sont dans les limites du monde et sont des entiers
+        x = int(max(0, min(x, world_bounds['max_x'] - 32)))  # 32 = taille de l'ennemi
+        y = int(max(0, min(y, world_bounds['max_y'] - 32)))
         
+        # Créer l'ennemi
         enemy = Enemy(x, y, self.config)
-        enemy.health = enemy_health
-        enemy.max_health = enemy_health
-        
-        # Augmenter la vitesse des ennemis avec les vagues
-        enemy.speed *= (1 + (self.wave_number - 1) * 0.1)
-        
         self.enemies.append(enemy)
     
-    def auto_fire(self):
-        """Tire automatiquement vers l'ennemi le plus proche"""
-        if not self.enemies:
-            return
+    def update_camera(self, player_was_moving, player_is_moving):
+        """Met à jour la position de la caméra avec un délai"""
+        # Calculer la position cible de la caméra (centrée sur le joueur)
+        target_x = self.player.x + self.player.size // 2 - self.config.WINDOW_WIDTH // 2
+        target_y = self.player.y + self.player.size // 2 - self.config.WINDOW_HEIGHT // 2
         
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
+        # Contraindre la cible dans les limites du monde
+        world_bounds = self.background.get_world_bounds()
+        target_x = max(0, min(target_x, world_bounds['max_x'] - self.config.WINDOW_WIDTH))
+        target_y = max(0, min(target_y, world_bounds['max_y'] - self.config.WINDOW_HEIGHT))
         
-        # Trouver l'ennemi le plus proche (optimisé)
-        min_distance_sq = float('inf')
-        closest_enemy = None
+        # Si le joueur commence à bouger, démarrer le timer de délai
+        if not player_was_moving and player_is_moving:
+            self.camera_delay_timer = self.camera_delay_duration
         
-        for enemy in self.enemies:
-            dx = enemy.x - player_center_x
-            dy = enemy.y - player_center_y
-            distance_sq = dx * dx + dy * dy  # Éviter sqrt pour la performance
-            
-            if distance_sq < min_distance_sq:
-                min_distance_sq = distance_sq
-                closest_enemy = enemy
+        # Diminuer le timer de délai
+        if self.camera_delay_timer > 0:
+            self.camera_delay_timer -= 1
         
-        if closest_enemy:
-            # Calculer la direction vers l'ennemi
-            dx = closest_enemy.x - player_center_x
-            dy = closest_enemy.y - player_center_y
-            distance = math.sqrt(dx * dx + dy * dy)
-            
-            if distance > 0:
-                # Normaliser la direction
-                dx /= distance
-                dy /= distance
-                
-                # Créer le zap
-                zap = Zap(player_center_x, player_center_y, dx, dy, self.config)
-                self.zaps.append(zap)
-    
-    def auto_lightning(self):
-        """Lance un éclair automatique si un ennemi est à portée"""
-        if not self.enemies:
-            return
+        # Si le délai est terminé, la caméra suit le joueur
+        if self.camera_delay_timer <= 0:
+            # Interpolation douce vers la position cible
+            self.camera_x += (target_x - self.camera_x) * self.camera_follow_speed
+            self.camera_y += (target_y - self.camera_y) * self.camera_follow_speed
         
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
-        
-        # Trouver les ennemis à portée
-        enemies_in_range = []
-        for enemy in self.enemies:
-            enemy_center_x = enemy.x + enemy.size // 2
-            enemy_center_y = enemy.y + enemy.size // 2
-            
-            distance = math.sqrt((enemy_center_x - player_center_x)**2 + 
-                               (enemy_center_y - player_center_y)**2)
-            
-            if distance <= self.config.LIGHTNING_RANGE:
-                enemies_in_range.append(enemy)
-        
-        if enemies_in_range:
-            # Choisir un ennemi aléatoire dans la portée
-            primary_target = random.choice(enemies_in_range)
-            
-            # Traiter l'éclair principal
-            self.process_lightning_strike(player_center_x, player_center_y, primary_target, True)
-    
-    def process_lightning_strike(self, start_x, start_y, target, is_primary=False):
-        """Traite un éclair individuel et gère le chaînage"""
-        if not target or target not in self.enemies:
-            return
-        
-        target_x = target.x + target.size // 2
-        target_y = target.y + target.size // 2
-        
-        # Créer l'éclair visuel
-        lightning = Lightning(start_x, start_y, target_x, target_y, self.config, not is_primary)
-        self.lightnings.append(lightning)
-        
-        # Infliger des dégâts
-        target.take_damage(self.config.LIGHTNING_DAMAGE)
-        
-        # Créer les particules d'explosion
-        self.create_explosion_particles(target_x, target_y)
-        
-        # Points et suppression si mort
-        if target.health <= 0:
-            self.enemies.remove(target)
-            self.score += 15 if is_primary else 10  # Moins de points pour les cibles secondaires
-        
-        # Chaînage uniquement pour l'éclair principal
-        if is_primary and random.random() < self.config.LIGHTNING_CHAIN_CHANCE:
-            # Chercher un second ennemi à portée de chaînage
-            secondary_targets = []
-            for enemy in self.enemies:
-                if enemy == target:  # Ne pas cibler le même ennemi
-                    continue
-                
-                enemy_center_x = enemy.x + enemy.size // 2
-                enemy_center_y = enemy.y + enemy.size // 2
-                
-                # Distance depuis la cible primaire
-                distance = math.sqrt((enemy_center_x - target_x)**2 + 
-                                   (enemy_center_y - target_y)**2)
-                
-                if distance <= self.config.LIGHTNING_CHAIN_RANGE:
-                    secondary_targets.append(enemy)
-            
-            if secondary_targets:
-                # Choisir la cible secondaire la plus proche
-                secondary_target = min(secondary_targets, key=lambda e: 
-                    math.sqrt((e.x + e.size//2 - target_x)**2 + (e.y + e.size//2 - target_y)**2))
-                
-                # Traiter l'éclair secondaire (sans chaînage supplémentaire)
-                self.process_lightning_strike(target_x, target_y, secondary_target, False)
+        # Si le joueur s'arrête, centrer immédiatement
+        if player_was_moving and not player_is_moving:
+            self.camera_x = target_x
+            self.camera_y = target_y
     
     def update_abilities_progression(self):
         """Met à jour les capacités du joueur"""
@@ -360,6 +299,105 @@ class Game:
                     self.current_lightning_fire_rate - 6
                 )
     
+    def auto_fire(self):
+        """Tire automatiquement vers l'ennemi le plus proche"""
+        if not self.enemies:
+            return
+        
+        # Portée maximale des projectiles : 10 tiles (320 pixels) - un peu plus que les éclairs
+        zap_range = 320
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        # Filtrer les ennemis dans la portée
+        enemies_in_range = [e for e in self.enemies 
+                           if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= zap_range]
+        
+        if not enemies_in_range:
+            return  # Aucun ennemi dans la portée
+        
+        # Trouver l'ennemi le plus proche parmi ceux dans la portée
+        closest_enemy = min(enemies_in_range, key=lambda e: 
+            math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
+        
+        # Créer un projectile
+        enemy_center_x = closest_enemy.x + closest_enemy.size // 2
+        enemy_center_y = closest_enemy.y + closest_enemy.size // 2
+        
+        zap = Zap(player_center_x, player_center_y, enemy_center_x, enemy_center_y, self.config)
+        self.zaps.append(zap)
+    
+    def auto_lightning(self):
+        """Tire automatiquement des éclairs vers plusieurs ennemis"""
+        if not self.enemies:
+            return
+        
+        # Trouver l'ennemi le plus proche dans la portée des éclairs
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        # Portée maximale de l'éclair : 8 tiles (256 pixels)
+        lightning_range = 384  # Augmenté de 320 à 384 (12 tiles au lieu de 10)
+        
+        # Filtrer les ennemis dans la portée
+        enemies_in_range = [e for e in self.enemies 
+                           if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= lightning_range]
+        
+        if not enemies_in_range:
+            return  # Aucun ennemi dans la portée
+        
+        # Trouver l'ennemi le plus proche parmi ceux dans la portée
+        closest_enemy = min(enemies_in_range, key=lambda e: 
+            math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
+        
+        # Créer un éclair
+        lightning = Lightning(player_center_x, player_center_y, 
+                            closest_enemy.x + closest_enemy.size // 2,
+                            closest_enemy.y + closest_enemy.size // 2,
+                            self.config)
+        self.lightnings.append(lightning)
+        
+        # Créer des particules d'explosion
+        self.create_explosion_particles(closest_enemy.x + closest_enemy.size // 2,
+                                      closest_enemy.y + closest_enemy.size // 2)
+        
+        # Appliquer des dégâts et trouver d'autres ennemis proches pour l'effet de chaîne
+        targets = [closest_enemy]
+        current_target = closest_enemy
+        
+        # Effet de chaîne : jusqu'à 3 ennemis supplémentaires dans un rayon de 8 tiles (256 pixels)
+        chain_range = 256  # 8 tiles × 32 pixels = 256 pixels
+        for _ in range(3):
+            nearby_enemies = [e for e in self.enemies 
+                            if e not in targets and 
+                            math.sqrt((e.x - current_target.x)**2 + (e.y - current_target.y)**2) <= chain_range]
+            if not nearby_enemies:
+                break
+            
+            next_target = min(nearby_enemies, key=lambda e: 
+                math.sqrt((e.x - current_target.x)**2 + (e.y - current_target.y)**2))
+            targets.append(next_target)
+            
+            # Créer un éclair vers la cible suivante
+            lightning = Lightning(current_target.x + current_target.size // 2,
+                                current_target.y + current_target.size // 2,
+                                next_target.x + next_target.size // 2,
+                                next_target.y + next_target.size // 2,
+                                self.config)
+            self.lightnings.append(lightning)
+            
+            current_target = next_target
+        
+        # Appliquer les dégâts à tous les ennemis touchés
+        for enemy in targets:
+            enemy.take_damage(self.config.LIGHTNING_DAMAGE)
+            self.create_explosion_particles(enemy.x + enemy.size // 2,
+                                          enemy.y + enemy.size // 2)
+            
+            if enemy.health <= 0:
+                self.enemies.remove(enemy)
+                self.score += 15  # Plus de points pour les éclairs
+    
     def create_explosion_particles(self, x, y):
         """Crée des particules d'explosion à la position donnée"""
         for _ in range(self.config.PARTICLE_COUNT):
@@ -375,33 +413,64 @@ class Game:
     
     def draw(self):
         """Dessine tous les éléments du jeu"""
-        self.screen.fill(self.config.BLACK)
+        # Utiliser les coordonnées de caméra avec délai
+        camera_x = self.camera_x
+        camera_y = self.camera_y
+        
+        # Dessiner l'arrière-plan procédural en premier
+        self.background.draw(self.screen, camera_x, camera_y)
         
         if not self.game_over:
             # Dessiner les entités (ordre d'arrière-plan vers premier plan)
             
             # Dessiner les ennemis en premier
             for enemy in self.enemies:
+                enemy_screen_x = enemy.x - camera_x
+                enemy_screen_y = enemy.y - camera_y
+                temp_x, temp_y = enemy.x, enemy.y
+                enemy.x, enemy.y = enemy_screen_x, enemy_screen_y
                 enemy.draw(self.screen)
+                enemy.x, enemy.y = temp_x, temp_y
             
             # Dessiner les projectiles
             for zap in self.zaps:
+                zap_screen_x = zap.x - camera_x
+                zap_screen_y = zap.y - camera_y
+                temp_x, temp_y = zap.x, zap.y
+                zap.x, zap.y = zap_screen_x, zap_screen_y
                 zap.draw(self.screen)
+                zap.x, zap.y = temp_x, temp_y
             
             # Dessiner les éclairs (derrière le joueur)
             for lightning in self.lightnings:
-                lightning.draw(self.screen)
+                # Les éclairs ont leurs propres coordonnées dans leurs points
+                lightning.draw(self.screen, camera_x, camera_y)
             
             # Dessiner les particules
             for particle in self.particles:
+                particle_screen_x = particle.x - camera_x
+                particle_screen_y = particle.y - camera_y
+                temp_x, temp_y = particle.x, particle.y
+                particle.x, particle.y = particle_screen_x, particle_screen_y
                 particle.draw(self.screen)
+                particle.x, particle.y = temp_x, temp_y
             
             # Dessiner les boules d'énergie
             for orb in self.energy_orbs:
+                orb_screen_x = orb.x - camera_x
+                orb_screen_y = orb.y - camera_y
+                temp_x, temp_y = orb.x, orb.y
+                orb.x, orb.y = orb_screen_x, orb_screen_y
                 orb.draw(self.screen)
+                orb.x, orb.y = temp_x, temp_y
             
             # Dessiner le joueur EN DERNIER (au premier plan)
+            player_screen_x = self.player.x - camera_x
+            player_screen_y = self.player.y - camera_y
+            temp_x, temp_y = self.player.x, self.player.y
+            self.player.x, self.player.y = player_screen_x, player_screen_y
             self.player.draw(self.screen)
+            self.player.x, self.player.y = temp_x, temp_y
         
         # Interface utilisateur
         self.draw_ui()
@@ -541,12 +610,21 @@ class Game:
         self.current_energy_orb_max = self.config.ENERGY_ORB_MAX_COUNT_BASE
         self.current_lightning_fire_rate = self.config.LIGHTNING_FIRE_RATE_BASE
         
-        # Réinitialiser le joueur
+        # Régénérer un nouveau terrain
+        self.background.regenerate()
+        
+        # Placer le joueur au centre du nouveau monde
+        world_bounds = self.background.get_world_bounds()
         self.player = Player(
-            self.config.WINDOW_WIDTH // 2,
-            self.config.WINDOW_HEIGHT // 2,
+            world_bounds['max_x'] // 2,
+            world_bounds['max_y'] // 2,
             self.config
         )
+        
+        # Réinitialiser la caméra
+        self.camera_x = self.player.x + self.player.size // 2 - self.config.WINDOW_WIDTH // 2
+        self.camera_y = self.player.y + self.player.size // 2 - self.config.WINDOW_HEIGHT // 2
+        self.camera_delay_timer = 0
         
         # Vider les listes
         self.enemies.clear()
