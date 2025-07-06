@@ -378,26 +378,30 @@ class Game:
         self.screen.fill(self.config.BLACK)
         
         if not self.game_over:
-            # Dessiner les entités
-            self.player.draw(self.screen)
+            # Dessiner les entités (ordre d'arrière-plan vers premier plan)
             
+            # Dessiner les ennemis en premier
             for enemy in self.enemies:
                 enemy.draw(self.screen)
             
+            # Dessiner les projectiles
             for zap in self.zaps:
                 zap.draw(self.screen)
             
-            # Dessiner les éclairs (nouveau)
+            # Dessiner les éclairs (derrière le joueur)
             for lightning in self.lightnings:
                 lightning.draw(self.screen)
             
-            # Dessiner les particules (nouveau)
+            # Dessiner les particules
             for particle in self.particles:
                 particle.draw(self.screen)
             
-            # Dessiner les boules d'énergie (nouveau)
+            # Dessiner les boules d'énergie
             for orb in self.energy_orbs:
                 orb.draw(self.screen)
+            
+            # Dessiner le joueur EN DERNIER (au premier plan)
+            self.player.draw(self.screen)
         
         # Interface utilisateur
         self.draw_ui()

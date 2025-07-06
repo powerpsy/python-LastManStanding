@@ -22,6 +22,36 @@ class Player:
         self.vel_x = 0
         self.vel_y = 0
         self.friction = config.PLAYER_FRICTION
+        
+        # Charger la spritesheet animée
+        try:
+            self.spritesheet = pygame.image.load("Birds.png").convert_alpha()
+            # Dimensions d'un sprite dans la sheet (64x64)
+            self.sprite_width = 64
+            self.sprite_height = 64
+            
+            # Extraire les 3 premiers sprites horizontaux
+            self.sprites = []
+            for i in range(3):
+                sprite_rect = pygame.Rect(i * self.sprite_width, 0, self.sprite_width, self.sprite_height)
+                sprite = self.spritesheet.subsurface(sprite_rect)
+                # Redimensionner avec un facteur d'échelle de 4x (2x * 2x)
+                sprite_size = self.size * 4
+                sprite = pygame.transform.scale(sprite, (sprite_size, sprite_size))
+                self.sprites.append(sprite)
+            
+            # Variables d'animation
+            self.animation_frames = [0, 1, 2, 1]  # Pattern 1-2-3-2
+            self.animation_index = 0
+            self.animation_timer = 0
+            self.animation_speed = 8  # Changer de frame toutes les 8 frames du jeu
+            
+            # Variables pour la direction
+            self.facing_right = False  # Par défaut, regarde vers la gauche
+            
+        except pygame.error:
+            print("⚠️  Impossible de charger Birds.png, utilisation du cercle par défaut")
+            self.sprites = None
     
     def update(self, keys):
         """Met à jour la position du joueur avec inertie"""
@@ -38,6 +68,13 @@ class Player:
         if keys[pygame.K_d]:
             accel_x = self.speed
         
+        # Déterminer la direction du déplacement horizontal
+        if accel_x > 0:  # Déplacement vers la droite
+            self.facing_right = True
+        elif accel_x < 0:  # Déplacement vers la gauche
+            self.facing_right = False
+        # Si accel_x == 0, on garde la direction précédente
+        
         # Appliquer l'accélération
         self.vel_x += accel_x
         self.vel_y += accel_y
@@ -49,6 +86,13 @@ class Player:
         # Mettre à jour la position
         self.x += self.vel_x
         self.y += self.vel_y
+        
+        # Mettre à jour l'animation
+        if self.sprites:
+            self.animation_timer += 1
+            if self.animation_timer >= self.animation_speed:
+                self.animation_timer = 0
+                self.animation_index = (self.animation_index + 1) % len(self.animation_frames)
     
     def take_damage(self, damage):
         """Fait subir des dégâts au joueur"""
@@ -56,15 +100,29 @@ class Player:
     
     def draw(self, screen):
         """Dessine le joueur"""
-        # Corps principal
-        pygame.draw.circle(screen, self.config.PLAYER_COLOR,
-                         (int(self.x + self.size//2), int(self.y + self.size//2)),
-                         self.size//2)
-        
-        # Contour blanc
-        pygame.draw.circle(screen, self.config.WHITE,
-                         (int(self.x + self.size//2), int(self.y + self.size//2)),
-                         self.size//2, 2)
+        if self.sprites:
+            # Utiliser le sprite animé centré sur la position du joueur
+            current_frame = self.animation_frames[self.animation_index]
+            current_sprite = self.sprites[current_frame]
+            
+            # Appliquer un miroir horizontal si le joueur regarde vers la droite
+            if self.facing_right:
+                current_sprite = pygame.transform.flip(current_sprite, True, False)
+            
+            sprite_rect = current_sprite.get_rect()
+            # Centrer le sprite sur les coordonnées du joueur
+            sprite_rect.center = (int(self.x + self.size//2), int(self.y + self.size//2))
+            screen.blit(current_sprite, sprite_rect)
+        else:
+            # Fallback : dessiner un cercle si le sprite n'est pas disponible
+            pygame.draw.circle(screen, self.config.PLAYER_COLOR,
+                             (int(self.x + self.size//2), int(self.y + self.size//2)),
+                             self.size//2)
+            
+            # Contour blanc
+            pygame.draw.circle(screen, self.config.WHITE,
+                             (int(self.x + self.size//2), int(self.y + self.size//2)),
+                             self.size//2, 2)
 
 
 class Enemy:
