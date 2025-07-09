@@ -194,8 +194,6 @@ class Enemy:
         
         # Effet scintillant pour les ennemis spéciaux
         if self.is_special:
-            import pygame
-            import math
             pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
             glow_color = (255, 255, 255, pulse)
             glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)

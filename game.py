@@ -1,7 +1,7 @@
 import pygame
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb
+from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb, BonusManager
 from background import Background
 
 class Game:
@@ -78,6 +78,9 @@ class Game:
         
         # Créer les orbes d'énergie initiales
         self.recreate_all_energy_orbs()
+        
+        # Gestionnaire de bonus
+        self.bonus_manager = BonusManager(config)
     
     def handle_events(self):
         """Gère les événements pygame"""
@@ -110,6 +113,9 @@ class Game:
         # Mise à jour de la caméra avec délai
         self.update_camera(player_was_moving, player_is_moving)
         
+        # Mettre à jour le gestionnaire de bonus
+        self.bonus_manager.update(self)
+        
         # Spawn des ennemis par vagues avec délai décroissant
         if len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
             # Nouvelle vague
@@ -140,13 +146,25 @@ class Game:
                 self.enemy_spawn_timer = 0
         
         # Met à jour les ennemis
+        enemy_speed_multiplier = self.bonus_manager.get_enemy_speed_multiplier()
         for enemy in self.enemies[:]:
+            # Appliquer le multiplicateur de vitesse (pour les bonus time_slow et freeze)
+            original_speed = enemy.speed
+            enemy.speed = original_speed * enemy_speed_multiplier
+            
             enemy.update(self.player.x, self.player.y)
+            
+            # Restaurer la vitesse originale
+            enemy.speed = original_speed
             
             # Collision avec le joueur
             if self.check_collision(self.player, enemy):
-                self.game_over = True
-                break
+                # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
+                if self.bonus_manager.can_take_damage():
+                    self.player.take_damage(self.config.ENEMY_DAMAGE)
+                    if self.player.health <= 0:
+                        self.game_over = True
+                        break
         
         # Tir automatique (restauré)
         self.fire_timer += 1
@@ -179,11 +197,18 @@ class Game:
             # Collision avec les ennemis
             for enemy in self.enemies[:]:
                 if self.check_collision(zap, enemy):
-                    enemy.take_damage(self.config.ZAP_DAMAGE)
+                    damage = int(self.config.ZAP_DAMAGE * self.bonus_manager.get_damage_multiplier())
+                    enemy.take_damage(damage)
                     self.zaps.remove(zap)
                     
                     if enemy.health <= 0:
-                        self.enemies.remove(enemy)
+                        # Appliquer bonus si c'est un ennemi spécial
+                        if enemy.is_special and enemy.bonus_type:
+                            self.bonus_manager.apply_bonus(enemy.bonus_type, self)
+                        
+                        # Vérifier que l'ennemi est encore dans la liste (au cas où le bonus l'aurait supprimé)
+                        if enemy in self.enemies:
+                            self.enemies.remove(enemy)
                         self.score += self.config.SCORE_PER_ENEMY_KILL
                     break
         
@@ -245,8 +270,9 @@ class Game:
         x = int(max(0, min(x, world_bounds['max_x'] - 32)))  # 32 = taille de l'ennemi
         y = int(max(0, min(y, world_bounds['max_y'] - 32)))
         
-        # Créer l'ennemi
-        enemy = Enemy(x, y, self.config)
+        # Créer l'ennemi (avec chance d'être spécial)
+        is_special = random.random() < self.config.SPECIAL_ENEMY_SPAWN_CHANCE
+        enemy = Enemy(x, y, self.config, is_special)
         self.enemies.append(enemy)
     
     def update_camera(self, player_was_moving, player_is_moving):
@@ -390,12 +416,19 @@ class Game:
         
         # Appliquer les dégâts à tous les ennemis touchés
         for enemy in targets:
-            enemy.take_damage(self.config.LIGHTNING_DAMAGE)
+            damage = int(self.config.LIGHTNING_DAMAGE * self.bonus_manager.get_damage_multiplier())
+            enemy.take_damage(damage)
             self.create_explosion_particles(enemy.x + enemy.size // 2,
                                           enemy.y + enemy.size // 2)
             
             if enemy.health <= 0:
-                self.enemies.remove(enemy)
+                # Appliquer bonus si c'est un ennemi spécial
+                if enemy.is_special and enemy.bonus_type:
+                    self.bonus_manager.apply_bonus(enemy.bonus_type, self)
+                
+                # Vérifier que l'ennemi est encore dans la liste (au cas où le bonus l'aurait supprimé)
+                if enemy in self.enemies:
+                    self.enemies.remove(enemy)
                 self.score += self.config.SCORE_PER_LIGHTNING_KILL  # Plus de points pour les éclairs
     
     def create_explosion_particles(self, x, y):
@@ -537,6 +570,21 @@ class Game:
         score_rect = score_surface.get_rect()
         score_rect.topright = (self.config.WINDOW_WIDTH - 10, 10)
         self.screen.blit(score_surface, score_rect)
+        
+        # Afficher les bonus actifs
+        y_offset = 135
+        for bonus_type, frames_left in self.bonus_manager.active_bonuses.items():
+            seconds_left = frames_left / 60
+            bonus_text = f"{bonus_type.replace('_', ' ').title()}: {seconds_left:.1f}s"
+            bonus_surface = self.small_font.render(bonus_text, True, self.config.YELLOW)
+            self.screen.blit(bonus_surface, (10, y_offset))
+            y_offset += 20
+        
+        # Afficher le bouclier s'il est actif
+        if self.bonus_manager.shield_hits_remaining > 0:
+            shield_text = f"🛡️ Bouclier: {self.bonus_manager.shield_hits_remaining} coups"
+            shield_surface = self.small_font.render(shield_text, True, self.config.CYAN)
+            self.screen.blit(shield_surface, (10, y_offset))
     
     def draw_pause_screen(self):
         """Dessine l'écran de pause"""
@@ -638,6 +686,9 @@ class Game:
         
         # Créer les orbes d'énergie initiales
         self.recreate_all_energy_orbs()
+        
+        # Réinitialiser le gestionnaire de bonus
+        self.bonus_manager = BonusManager(self.config)
     
     def run(self):
         """Boucle principale du jeu"""
@@ -702,11 +753,17 @@ class Game:
                         (player_minimap_x - player_half_size, player_minimap_y - player_half_size, 
                          self.config.MINIMAP_PLAYER_SIZE, self.config.MINIMAP_PLAYER_SIZE))
         
-        # Dessiner les ennemis (carrés rouges avec transparence)
+        # Dessiner les ennemis (carrés rouges ou verts selon le type)
         for enemy in self.enemies:
             enemy_minimap_x = int(enemy.x * scale)
             enemy_minimap_y = int(enemy.y * scale)
-            enemy_color = (255, 0, 0, self.config.MINIMAP_ALPHA)
+            
+            # Couleur selon le type d'ennemi
+            if enemy.is_special:
+                enemy_color = (0, 255, 0, self.config.MINIMAP_ALPHA)  # Vert pour les spéciaux
+            else:
+                enemy_color = (255, 0, 0, self.config.MINIMAP_ALPHA)  # Rouge pour les normaux
+                
             enemy_half_size = self.config.MINIMAP_ENEMY_SIZE // 2
             pygame.draw.rect(minimap_surface, enemy_color, 
                             (enemy_minimap_x - enemy_half_size, enemy_minimap_y - enemy_half_size, 

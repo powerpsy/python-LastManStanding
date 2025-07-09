@@ -41,7 +41,7 @@ class Config:
         
         # Paramètres des ennemis (adaptatifs)
         self.ENEMY_SIZE = int(self.WINDOW_WIDTH * 0.015)  # 1.5% de la largeur
-        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.002  # Plus lent que le joueur
+        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.003  # Plus lent que le joueur
         self.ENEMY_HEALTH = 20
         self.ENEMY_DAMAGE = 10
         
@@ -95,8 +95,8 @@ class Config:
         # Paramètres des vagues d'ennemis
         self.INITIAL_ENEMIES_PER_WAVE = 15  # Nombre d'ennemis dans la première vague
         self.ENEMIES_INCREASE_PER_WAVE = 5  # Augmentation du nombre d'ennemis par vague
-        self.ENEMY_SPAWN_DELAY_BASE = 60    # Délai de base entre les spawns (frames)
-        self.ENEMY_SPAWN_DELAY_MIN = 10     # Délai minimum entre les spawns (frames)
+        self.ENEMY_SPAWN_DELAY_BASE = 30    # Délai de base entre les spawns (frames)
+        self.ENEMY_SPAWN_DELAY_MIN = 5     # Délai minimum entre les spawns (frames)
         self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85  # Facteur de réduction du délai par vague
         
         # Système de caméra
