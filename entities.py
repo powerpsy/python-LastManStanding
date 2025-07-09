@@ -128,13 +128,22 @@ class Player:
 class Enemy:
     """Classe des ennemis avec IA de poursuite"""
     
-    def __init__(self, x, y, config):
+    def __init__(self, x, y, config, is_special=False):
         self.x = x
         self.y = y
         self.config = config
         self.size = config.ENEMY_SIZE
         self.speed = config.ENEMY_SPEED
-        self.max_health = config.ENEMY_HEALTH
+        
+        # Ennemi spécial
+        self.is_special = is_special
+        if is_special:
+            self.max_health = int(config.ENEMY_HEALTH * config.SPECIAL_ENEMY_HEALTH_MULTIPLIER)
+            self.bonus_type = random.choice(config.BONUS_TYPES)
+        else:
+            self.max_health = config.ENEMY_HEALTH
+            self.bonus_type = None
+            
         self.health = self.max_health
         
         # Composante aléatoire pour l'IA
@@ -171,13 +180,26 @@ class Enemy:
     
     def draw(self, screen):
         """Dessine l'ennemi"""
+        # Couleur selon le type d'ennemi
+        enemy_color = self.config.SPECIAL_ENEMY_COLOR if self.is_special else self.config.ENEMY_COLOR
+        
         # Corps principal
-        pygame.draw.rect(screen, self.config.ENEMY_COLOR,
+        pygame.draw.rect(screen, enemy_color,
                         (int(self.x), int(self.y), self.size, self.size))
         
-        # Contour blanc
+        # Contour blanc (plus épais pour les ennemis spéciaux)
+        border_width = 3 if self.is_special else 2
         pygame.draw.rect(screen, self.config.WHITE,
-                        (int(self.x), int(self.y), self.size, self.size), 2)
+                        (int(self.x), int(self.y), self.size, self.size), border_width)
+        
+        # Effet scintillant pour les ennemis spéciaux
+        if self.is_special:
+            import pygame
+            import math
+            pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
+            glow_color = (255, 255, 255, pulse)
+            glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
+            pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
         
         # Barre de santé si endommagé
         if self.health < self.max_health:
@@ -433,3 +455,135 @@ class EnergyOrb:
     def get_collision_rect(self):
         """Retourne le rectangle de collision"""
         return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
+
+class BonusManager:
+    """Gestionnaire des bonus temporaires du joueur"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.active_bonuses = {}  # {bonus_type: frames_restants}
+        
+        # États temporaires
+        self.shield_hits_remaining = 0
+        self.original_speed = None
+        
+    def apply_bonus(self, bonus_type, game_instance):
+        """Applique un bonus selon son type"""
+        if bonus_type == "bomb":
+            # Bombe générale - élimine tous les ennemis
+            enemies_killed = len(game_instance.enemies)
+            game_instance.enemies.clear()
+            game_instance.score += enemies_killed * game_instance.config.SCORE_PER_ENEMY_KILL
+            print(f"💣 Bombe ! {enemies_killed} ennemis éliminés")
+            
+        elif bonus_type == "heal":
+            # Potion de soin
+            old_health = game_instance.player.health
+            game_instance.player.health = min(
+                game_instance.player.max_health,
+                game_instance.player.health + self.config.BONUS_HEAL_AMOUNT
+            )
+            healed = game_instance.player.health - old_health
+            print(f"❤️ Soigné de {healed} points de vie")
+            
+        elif bonus_type == "shield":
+            # Aura de protection
+            self.shield_hits_remaining = self.config.BONUS_SHIELD_HITS
+            print(f"🛡️ Bouclier activé ({self.shield_hits_remaining} coups)")
+            
+        elif bonus_type == "double_damage":
+            # Double dégâts
+            self.active_bonuses["double_damage"] = self.config.BONUS_DOUBLE_DAMAGE_DURATION
+            print("⚔️ Double dégâts activé")
+            
+        elif bonus_type == "lightning_storm":
+            # Tempête d'éclairs
+            player_center_x = game_instance.player.x + game_instance.player.size // 2
+            player_center_y = game_instance.player.y + game_instance.player.size // 2
+            
+            for _ in range(self.config.BONUS_LIGHTNING_STORM_COUNT):
+                if game_instance.enemies:
+                    target = random.choice(game_instance.enemies)
+                    lightning = Lightning(
+                        player_center_x, player_center_y,
+                        target.x + target.size // 2, target.y + target.size // 2,
+                        self.config
+                    )
+                    game_instance.lightnings.append(lightning)
+            print(f"⚡ Tempête d'éclairs ! {self.config.BONUS_LIGHTNING_STORM_COUNT} éclairs")
+            
+        elif bonus_type == "speed_boost":
+            # Boost de vitesse
+            if self.original_speed is None:
+                self.original_speed = game_instance.player.speed
+            game_instance.player.speed = self.original_speed * self.config.BONUS_SPEED_BOOST_MULTIPLIER
+            self.active_bonuses["speed_boost"] = self.config.BONUS_SPEED_BOOST_DURATION
+            print("🚀 Boost de vitesse activé")
+            
+        elif bonus_type == "invincibility":
+            # Invincibilité temporaire
+            self.active_bonuses["invincibility"] = self.config.BONUS_INVINCIBILITY_DURATION
+            print("✨ Invincibilité activée")
+            
+        elif bonus_type == "time_slow":
+            # Ralentissement du temps
+            self.active_bonuses["time_slow"] = self.config.BONUS_TIME_SLOW_DURATION
+            print("⏰ Temps ralenti")
+            
+        elif bonus_type == "freeze":
+            # Gel des ennemis
+            self.active_bonuses["freeze"] = self.config.BONUS_FREEZE_DURATION
+            print("❄️ Ennemis gelés")
+    
+    def update(self, game_instance):
+        """Met à jour les bonus actifs"""
+        # Décrémenter les durées
+        for bonus_type in list(self.active_bonuses.keys()):
+            self.active_bonuses[bonus_type] -= 1
+            if self.active_bonuses[bonus_type] <= 0:
+                self._end_bonus(bonus_type, game_instance)
+                del self.active_bonuses[bonus_type]
+    
+    def _end_bonus(self, bonus_type, game_instance):
+        """Termine un bonus"""
+        if bonus_type == "speed_boost" and self.original_speed is not None:
+            game_instance.player.speed = self.original_speed
+            self.original_speed = None
+            print("🚀 Boost de vitesse terminé")
+        elif bonus_type == "invincibility":
+            print("✨ Invincibilité terminée")
+        elif bonus_type == "time_slow":
+            print("⏰ Temps normal")
+        elif bonus_type == "freeze":
+            print("❄️ Dégel des ennemis")
+    
+    def can_take_damage(self):
+        """Vérifie si le joueur peut subir des dégâts"""
+        # Bouclier
+        if self.shield_hits_remaining > 0:
+            self.shield_hits_remaining -= 1
+            print(f"🛡️ Bouclier ! ({self.shield_hits_remaining} coups restants)")
+            return False
+        
+        # Invincibilité
+        if "invincibility" in self.active_bonuses:
+            return False
+            
+        return True
+    
+    def get_damage_multiplier(self):
+        """Retourne le multiplicateur de dégâts"""
+        return 2.0 if "double_damage" in self.active_bonuses else 1.0
+    
+    def get_enemy_speed_multiplier(self):
+        """Retourne le multiplicateur de vitesse des ennemis"""
+        if "time_slow" in self.active_bonuses:
+            return self.config.BONUS_TIME_SLOW_FACTOR
+        elif "freeze" in self.active_bonuses:
+            return 0.0
+        return 1.0
+    
+    def is_active(self, bonus_type):
+        """Vérifie si un bonus est actif"""
+        return bonus_type in self.active_bonuses

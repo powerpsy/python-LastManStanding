@@ -37,12 +37,12 @@ class Game:
         
         # Gestion des vagues d'ennemis
         self.wave_number = 1
-        self.enemies_per_wave = 5
+        self.enemies_per_wave = config.INITIAL_ENEMIES_PER_WAVE
         self.enemies_spawned = 0
         self.enemy_spawn_timer = 0
-        self.enemy_spawn_delay = 120  # frames entre chaque ennemi (2 secondes à 60fps)
-        self.base_spawn_delay = 120   # délai de base pour calculer la réduction
-        self.min_spawn_delay = 20     # délai minimum (0.33 secondes)
+        self.enemy_spawn_delay = config.ENEMY_SPAWN_DELAY_BASE
+        self.base_spawn_delay = config.ENEMY_SPAWN_DELAY_BASE
+        self.min_spawn_delay = config.ENEMY_SPAWN_DELAY_MIN
         
         # Tir automatique
         self.fire_timer = 0
@@ -58,8 +58,8 @@ class Game:
         self.camera_target_x = 0
         self.camera_target_y = 0
         self.camera_delay_timer = 0
-        self.camera_delay_duration = 12  # 0.2s à 60fps
-        self.camera_follow_speed = 0.08  # Vitesse de suivi de la caméra (0.08 = 8%)
+        self.camera_delay_duration = config.CAMERA_DELAY_DURATION
+        self.camera_follow_speed = config.CAMERA_FOLLOW_SPEED
         
         # Créer l'arrière-plan procédural
         self.background = Background(config)
@@ -114,15 +114,15 @@ class Game:
         if len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
             # Nouvelle vague
             self.wave_number += 1
-            self.score += 50 * self.wave_number  # Bonus de vague
-            self.enemies_per_wave += 2  # Plus d'ennemis par vague
+            self.score += self.config.SCORE_WAVE_BONUS_MULTIPLIER * self.wave_number  # Bonus de vague
+            self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE
             self.enemies_spawned = 0
             
             # Progression des capacités tous les 5 niveaux
             self.update_abilities_progression()
             
             # Réduction du délai entre les ennemis (plus difficile)
-            reduction_factor = 0.85 ** (self.wave_number - 1)
+            reduction_factor = self.config.ENEMY_SPAWN_DELAY_REDUCTION ** (self.wave_number - 1)
             self.enemy_spawn_delay = max(
                 self.min_spawn_delay,
                 int(self.base_spawn_delay * reduction_factor)
@@ -184,7 +184,7 @@ class Game:
                     
                     if enemy.health <= 0:
                         self.enemies.remove(enemy)
-                        self.score += 10
+                        self.score += self.config.SCORE_PER_ENEMY_KILL
                     break
         
         # Met à jour les éclairs
@@ -396,7 +396,7 @@ class Game:
             
             if enemy.health <= 0:
                 self.enemies.remove(enemy)
-                self.score += 15  # Plus de points pour les éclairs
+                self.score += self.config.SCORE_PER_LIGHTNING_KILL  # Plus de points pour les éclairs
     
     def create_explosion_particles(self, x, y):
         """Crée des particules d'explosion à la position donnée"""
@@ -471,6 +471,9 @@ class Game:
             self.player.x, self.player.y = player_screen_x, player_screen_y
             self.player.draw(self.screen)
             self.player.x, self.player.y = temp_x, temp_y
+        
+        # Minimap
+        self.draw_minimap()
         
         # Interface utilisateur
         self.draw_ui()
@@ -599,10 +602,10 @@ class Game:
         self.paused = False
         self.score = 0
         self.wave_number = 1
-        self.enemies_per_wave = 5
+        self.enemies_per_wave = self.config.INITIAL_ENEMIES_PER_WAVE
         self.enemies_spawned = 0
         self.enemy_spawn_timer = 0
-        self.enemy_spawn_delay = 120
+        self.enemy_spawn_delay = self.config.ENEMY_SPAWN_DELAY_BASE
         self.fire_timer = 0
         self.lightning_timer = 0  # Nouveau
         
@@ -662,3 +665,57 @@ class Game:
         for i in range(self.current_energy_orb_max):
             orb = EnergyOrb(player_center_x, player_center_y, i, self.current_energy_orb_max, self.config)
             self.energy_orbs.append(orb)
+    
+    def draw_minimap(self):
+        """Dessine une minimap en bas à droite de la fenêtre"""
+        # Paramètres de la minimap - CARRÉE puisque la map est carrée (100x100)
+        # Utiliser la plus petite dimension pour que la minimap soit carrée et tienne à l'écran
+        minimap_size = min(self.config.WINDOW_WIDTH // self.config.MINIMAP_SIZE_RATIO, 
+                          self.config.WINDOW_HEIGHT // self.config.MINIMAP_SIZE_RATIO)
+        minimap_width = minimap_size
+        minimap_height = minimap_size
+        
+        # Position de la minimap (en bas à droite avec marge)
+        minimap_x = self.config.WINDOW_WIDTH - minimap_width - self.config.MINIMAP_MARGIN
+        minimap_y = self.config.WINDOW_HEIGHT - minimap_height - self.config.MINIMAP_MARGIN
+        
+        # Créer une surface pour la minimap avec support de la transparence
+        minimap_surface = pygame.Surface((minimap_width, minimap_height), pygame.SRCALPHA)
+        minimap_surface.fill((50, 50, 50, self.config.MINIMAP_ALPHA))  # Fond gris foncé avec transparence
+        
+        # Obtenir les limites du monde
+        world_bounds = self.background.get_world_bounds()
+        world_width = world_bounds['max_x']
+        world_height = world_bounds['max_y']
+        
+        # Calculer le ratio d'échelle pour adapter le monde entier à la minimap
+        scale_x = minimap_width / world_width
+        scale_y = minimap_height / world_height
+        scale = min(scale_x, scale_y)  # Utiliser le plus petit ratio pour garder les proportions
+        
+        # Dessiner le joueur (carré blanc avec transparence)
+        player_minimap_x = int(self.player.x * scale)
+        player_minimap_y = int(self.player.y * scale)
+        player_color = (255, 255, 255, self.config.MINIMAP_ALPHA)
+        player_half_size = self.config.MINIMAP_PLAYER_SIZE // 2
+        pygame.draw.rect(minimap_surface, player_color, 
+                        (player_minimap_x - player_half_size, player_minimap_y - player_half_size, 
+                         self.config.MINIMAP_PLAYER_SIZE, self.config.MINIMAP_PLAYER_SIZE))
+        
+        # Dessiner les ennemis (carrés rouges avec transparence)
+        for enemy in self.enemies:
+            enemy_minimap_x = int(enemy.x * scale)
+            enemy_minimap_y = int(enemy.y * scale)
+            enemy_color = (255, 0, 0, self.config.MINIMAP_ALPHA)
+            enemy_half_size = self.config.MINIMAP_ENEMY_SIZE // 2
+            pygame.draw.rect(minimap_surface, enemy_color, 
+                            (enemy_minimap_x - enemy_half_size, enemy_minimap_y - enemy_half_size, 
+                             self.config.MINIMAP_ENEMY_SIZE, self.config.MINIMAP_ENEMY_SIZE))
+        
+        # Dessiner un rectangle de bordure autour de la minimap avec transparence
+        border_color = (200, 200, 200, self.config.MINIMAP_ALPHA)
+        pygame.draw.rect(minimap_surface, border_color, 
+                        (0, 0, minimap_width, minimap_height), 2)
+        
+        # Afficher la minimap sur l'écran principal
+        self.screen.blit(minimap_surface, (minimap_x, minimap_y))

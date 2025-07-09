@@ -91,3 +91,57 @@ class Config:
         self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur
         self.HEALTH_BAR_HEIGHT = int(self.WINDOW_HEIGHT * 0.02)  # 2% de la hauteur
         self.UI_MARGIN = int(self.WINDOW_WIDTH * 0.01)  # 1% de marge
+        
+        # Paramètres des vagues d'ennemis
+        self.INITIAL_ENEMIES_PER_WAVE = 15  # Nombre d'ennemis dans la première vague
+        self.ENEMIES_INCREASE_PER_WAVE = 5  # Augmentation du nombre d'ennemis par vague
+        self.ENEMY_SPAWN_DELAY_BASE = 60    # Délai de base entre les spawns (frames)
+        self.ENEMY_SPAWN_DELAY_MIN = 10     # Délai minimum entre les spawns (frames)
+        self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85  # Facteur de réduction du délai par vague
+        
+        # Système de caméra
+        self.CAMERA_DELAY_DURATION = 12     # Délai avant que la caméra suive (frames)
+        self.CAMERA_FOLLOW_SPEED = 0.08     # Vitesse de suivi de la caméra (0-1)
+        self.CAMERA_MARGIN = 20             # Marge autour des bords de l'écran
+        
+        # Scores et progression
+        self.SCORE_PER_ENEMY_KILL = 10      # Points par ennemi tué
+        self.SCORE_PER_LIGHTNING_KILL = 15  # Points bonus pour les kills par éclair
+        self.SCORE_WAVE_BONUS_MULTIPLIER = 50  # Multiplicateur de bonus de vague
+        
+        # Paramètres de la minimap
+        self.MINIMAP_ALPHA = 128  # Transparence de la minimap (0-255, 128 = 50%)
+        self.MINIMAP_SIZE_RATIO = 4  # Taille de la minimap (1/4 de l'écran)
+        self.MINIMAP_MARGIN = 20     # Marge depuis le bord de l'écran
+        self.MINIMAP_PLAYER_SIZE = 3  # Taille du point joueur sur la minimap
+        self.MINIMAP_ENEMY_SIZE = 3   # Taille des points ennemis sur la minimap
+        
+        # Ennemis spéciaux et système de bonus
+        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.01  # 1% de chance
+        self.SPECIAL_ENEMY_COLOR = self.GREEN   # Couleur verte
+        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 1.5  # 50% de vie en plus
+        
+        # Types de bonus disponibles
+        self.BONUS_TYPES = [
+            "bomb",           # Bombe générale
+            "heal",           # Potion de soin
+            "shield",         # Aura de protection
+            "double_damage",  # Double dégâts
+            "lightning_storm",# Tempête d'éclairs
+            "speed_boost",    # Boost de vitesse
+            "invincibility", # Invincibilité temporaire
+            "time_slow",     # Ralentissement du temps
+            "freeze"         # Gel des ennemis
+        ]
+        
+        # Paramètres des bonus
+        self.BONUS_HEAL_AMOUNT = 20             # Points de vie restaurés
+        self.BONUS_SHIELD_HITS = 1              # Nombre de coups bloqués
+        self.BONUS_DOUBLE_DAMAGE_DURATION = 600 # 10 secondes à 60fps
+        self.BONUS_LIGHTNING_STORM_COUNT = 5    # Nombre d'éclairs
+        self.BONUS_SPEED_BOOST_DURATION = 480   # 8 secondes à 60fps
+        self.BONUS_SPEED_BOOST_MULTIPLIER = 2.0 # Multiplicateur de vitesse
+        self.BONUS_INVINCIBILITY_DURATION = 180 # 3 secondes à 60fps
+        self.BONUS_TIME_SLOW_DURATION = 480     # 8 secondes à 60fps
+        self.BONUS_TIME_SLOW_FACTOR = 0.3       # Facteur de ralentissement
+        self.BONUS_FREEZE_DURATION = 240        # 4 secondes à 60fps
