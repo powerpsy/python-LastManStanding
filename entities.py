@@ -68,6 +68,12 @@ class Player:
         if keys[pygame.K_d]:
             accel_x = self.speed
         
+        # Normalisation pour vitesse constante en diagonale
+        if accel_x != 0 and accel_y != 0:
+            norm = math.sqrt(accel_x ** 2 + accel_y ** 2)
+            accel_x = accel_x / norm * self.speed
+            accel_y = accel_y / norm * self.speed
+        
         # Déterminer la direction du déplacement horizontal
         if accel_x > 0:  # Déplacement vers la droite
             self.facing_right = True
@@ -169,7 +175,11 @@ class Enemy:
             # Normaliser et ajouter composante aléatoire
             dx = (dx / distance) + self.random_offset_x
             dy = (dy / distance) + self.random_offset_y
-            
+            # Normalisation pour vitesse constante
+            norm = math.sqrt(dx**2 + dy**2)
+            if norm > 0:
+                dx = dx / norm
+                dy = dy / norm
             # Déplacer l'ennemi
             self.x += dx * self.speed
             self.y += dy * self.speed

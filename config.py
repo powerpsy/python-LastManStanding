@@ -93,9 +93,9 @@ class Config:
         self.UI_MARGIN = int(self.WINDOW_WIDTH * 0.01)  # 1% de marge
         
         # Paramètres des vagues d'ennemis
-        self.INITIAL_ENEMIES_PER_WAVE = 15  # Nombre d'ennemis dans la première vague
+        self.INITIAL_ENEMIES_PER_WAVE = 1  # Nombre d'ennemis dans la première vague
         self.ENEMIES_INCREASE_PER_WAVE = 5  # Augmentation du nombre d'ennemis par vague
-        self.ENEMY_SPAWN_DELAY_BASE = 30    # Délai de base entre les spawns (frames)
+        self.ENEMY_SPAWN_DELAY_BASE = 20    # Délai de base entre les spawns (frames)
         self.ENEMY_SPAWN_DELAY_MIN = 5     # Délai minimum entre les spawns (frames)
         self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85  # Facteur de réduction du délai par vague
         
@@ -107,32 +107,37 @@ class Config:
         # Scores et progression
         self.SCORE_PER_ENEMY_KILL = 10      # Points par ennemi tué
         self.SCORE_PER_LIGHTNING_KILL = 15  # Points bonus pour les kills par éclair
-        self.SCORE_WAVE_BONUS_MULTIPLIER = 50  # Multiplicateur de bonus de vague
-        
-        # Paramètres de la minimap
-        self.MINIMAP_ALPHA = 128  # Transparence de la minimap (0-255, 128 = 50%)
-        self.MINIMAP_SIZE_RATIO = 4  # Taille de la minimap (1/4 de l'écran)
-        self.MINIMAP_MARGIN = 20     # Marge depuis le bord de l'écran
-        self.MINIMAP_PLAYER_SIZE = 3  # Taille du point joueur sur la minimap
-        self.MINIMAP_ENEMY_SIZE = 3   # Taille des points ennemis sur la minimap
-        
-        # Ennemis spéciaux et système de bonus
-        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.01  # 1% de chance
-        self.SPECIAL_ENEMY_COLOR = self.GREEN   # Couleur verte
-        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 1.5  # 50% de vie en plus
-        
-        # Types de bonus disponibles
-        self.BONUS_TYPES = [
-            "bomb",           # Bombe générale
-            "heal",           # Potion de soin
-            "shield",         # Aura de protection
-            "double_damage",  # Double dégâts
-            "lightning_storm",# Tempête d'éclairs
-            "speed_boost",    # Boost de vitesse
-            "invincibility", # Invincibilité temporaire
-            "time_slow",     # Ralentissement du temps
-            "freeze"         # Gel des ennemis
+        self.SCORE_WAVE_BONUS_MULTIPLIER = 100  # Bonus de points par vague
+    
+        # Options d'upgrade disponibles
+        self.UPGRADE_POOL = [
+            {"id": "speed", "name": "Vitesse +20%", "description": "Augmente la vitesse de déplacement"},
+            {"id": "fire_rate", "name": "Cadence +30%", "description": "Tire plus rapidement"},
+            {"id": "damage", "name": "Dégâts +25%", "description": "Les éclairs font plus de dégâts"},
+            {"id": "orb_damage", "name": "Orbes +40%", "description": "Les orbes font plus de dégâts"},
+            {"id": "orb_count", "name": "Orbe supplémentaire", "description": "Ajoute une orbe défensive"},
+            {"id": "lightning_pierce", "name": "Éclair perforant", "description": "Les éclairs traversent les ennemis"},
+            {"id": "healing", "name": "Régénération", "description": "Récupère de la vie au fil du temps"},
+            {"id": "shield", "name": "Bouclier temporaire", "description": "Protection contre les dégâts"},
+            {"id": "explosion", "name": "Éclairs explosifs", "description": "Les éclairs explosent à l'impact"},
+            {"id": "magnet", "name": "Aimant", "description": "Attire les objets à distance"},
+            {"id": "multishot", "name": "Tir multiple", "description": "Tire plusieurs éclairs"},
+            {"id": "freeze", "name": "Ralentissement", "description": "Les ennemis touchés ralentissent"},
         ]
+        
+        # Configuration de la minimap
+        self.MINIMAP_SIZE_RATIO = 6.0  # Diviseur pour calculer la taille (window_width / 6)
+        self.MINIMAP_ALPHA = 180  # Plus opaque pour être plus visible
+        self.MINIMAP_MARGIN = 10
+        self.MINIMAP_PLAYER_SIZE = 4  # Légèrement plus grand
+        self.MINIMAP_ENEMY_SIZE = 3   # Légèrement plus grand
+        
+        # Configuration des ennemis spéciaux
+        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.1
+        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 3.0
+        self.SPECIAL_ENEMY_DAMAGE_MULTIPLIER = 1.5
+        self.SPECIAL_ENEMY_SPEED_MULTIPLIER = 0.8
+        self.SPECIAL_ENEMY_COLOR = (255, 100, 0)  # Orange pour les distinguer
         
         # Paramètres des bonus
         self.BONUS_HEAL_AMOUNT = 20             # Points de vie restaurés
@@ -145,3 +150,15 @@ class Config:
         self.BONUS_TIME_SLOW_DURATION = 480     # 8 secondes à 60fps
         self.BONUS_TIME_SLOW_FACTOR = 0.3       # Facteur de ralentissement
         self.BONUS_FREEZE_DURATION = 240        # 4 secondes à 60fps
+        
+        # Types de bonus disponibles
+        self.BONUS_TYPES = [
+            "heal",
+            "shield", 
+            "double_damage",
+            "lightning_storm",
+            "speed_boost",
+            "invincibility",
+            "time_slow",
+            "freeze"
+        ]

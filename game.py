@@ -20,6 +20,7 @@ class Game:
         # État du jeu
         self.running = True
         self.paused = False
+        self.paused_skills = False  # Nouvel état pour l'écran de compétences
         self.game_over = False
         self.score = 0
         
@@ -58,26 +59,18 @@ class Game:
         self.camera_target_x = 0
         self.camera_target_y = 0
         self.camera_delay_timer = 0
+        self.camera_follow_speed = 0.1
         self.camera_delay_duration = config.CAMERA_DELAY_DURATION
-        self.camera_follow_speed = config.CAMERA_FOLLOW_SPEED
         
-        # Créer l'arrière-plan procédural
+        # Système d'upgrade
+        self.show_upgrade_screen = False
+        self.ban_mode = False
+        self.upgrade_options = []
+        self.roll_count = 3
+        self.ban_count = 3
+        
+        # Initialisation du background
         self.background = Background(config)
-        
-        # Placer le joueur au centre du monde généré
-        world_bounds = self.background.get_world_bounds()
-        self.player.x = world_bounds['max_x'] // 2
-        self.player.y = world_bounds['max_y'] // 2
-        
-        # Initialiser la caméra centrée sur le joueur
-        self.camera_x = self.player.x + self.player.size // 2 - self.config.WINDOW_WIDTH // 2
-        self.camera_y = self.player.y + self.player.size // 2 - self.config.WINDOW_HEIGHT // 2
-        # Contraindre la caméra dans les limites du monde
-        self.camera_x = max(0, min(self.camera_x, world_bounds['max_x'] - self.config.WINDOW_WIDTH))
-        self.camera_y = max(0, min(self.camera_y, world_bounds['max_y'] - self.config.WINDOW_HEIGHT))
-        
-        # Créer les orbes d'énergie initiales
-        self.recreate_all_energy_orbs()
         
         # Gestionnaire de bonus
         self.bonus_manager = BonusManager(config)
@@ -87,15 +80,41 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
-                elif event.key == pygame.K_p:
-                    self.paused = not self.paused
-                elif event.key == pygame.K_r and self.game_over:
-                    self.restart_game()
-    
+                return
+            if self.show_upgrade_screen:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx, my = pygame.mouse.get_pos()
+                    # Boutons
+                    btn_w, btn_h = 120, 48
+                    screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
+                    btn_y = screen_h//2 + 120
+                    roll_rect = pygame.Rect(screen_w//2-200, btn_y, btn_w, btn_h)
+                    ban_rect = pygame.Rect(screen_w//2-60, btn_y, btn_w, btn_h)
+                    skip_rect = pygame.Rect(screen_w//2+80, btn_y, btn_w, btn_h)
+                    # ROLL
+                    if roll_rect.collidepoint(mx, my) and self.roll_count > 0 and not self.ban_mode:
+                        self.upgrade_options = random.sample(self.config.UPGRADE_POOL, 3)
+                        self.roll_count -= 1
+                    # BAN
+                    elif ban_rect.collidepoint(mx, my) and self.ban_count > 0 and not self.ban_mode:
+                        self.ban_mode = True
+                        # Changer le background à la prochaine draw
+                    # SKIP
+                    elif skip_rect.collidepoint(mx, my):
+                        self.show_upgrade_screen = False
+                        self.paused = False
+                        self.ban_mode = False
+                    # Sélection d'une option en mode BAN
+                    elif self.ban_mode:
+                        for i, rect in enumerate(self.get_upgrade_option_rects()):
+                            if rect.collidepoint(mx, my):
+                                self.upgrade_options.pop(i)
+                                self.ban_count -= 1
+                                self.ban_mode = False
+                                break
+                return
+            # ...existing code...
+
     def update(self):
         """Met à jour la logique du jeu"""
         if self.paused or self.game_over:
@@ -123,6 +142,9 @@ class Game:
             self.score += self.config.SCORE_WAVE_BONUS_MULTIPLIER * self.wave_number  # Bonus de vague
             self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE
             self.enemies_spawned = 0
+            
+            # Déclencher l'écran d'upgrade
+            self.trigger_upgrade_screen()
             
             # Progression des capacités tous les 5 niveaux
             self.update_abilities_progression()
@@ -446,6 +468,19 @@ class Game:
     
     def draw(self):
         """Dessine tous les éléments du jeu"""
+        # TOUJOURS remplir l'écran d'abord pour éviter l'écran noir
+        self.screen.fill((50, 50, 50))  # Fond gris foncé
+        
+        if self.show_upgrade_screen:
+            self.draw_upgrade_screen()
+            pygame.display.flip()
+            return
+        
+        if self.paused_skills:
+            self.draw_skills_screen()
+            pygame.display.flip()
+            return
+        
         # Utiliser les coordonnées de caméra avec délai
         camera_x = self.camera_x
         camera_y = self.camera_y
@@ -516,7 +551,9 @@ class Game:
         elif self.game_over:
             self.draw_game_over_screen()
         
+        # TOUJOURS faire le flip pour afficher à l'écran
         pygame.display.flip()
+        # ...existing code...
     
     def draw_ui(self):
         """Dessine l'interface utilisateur"""
@@ -734,19 +771,26 @@ class Game:
         minimap_surface = pygame.Surface((minimap_width, minimap_height), pygame.SRCALPHA)
         minimap_surface.fill((50, 50, 50, self.config.MINIMAP_ALPHA))  # Fond gris foncé avec transparence
         
-        # Obtenir les limites du monde
+        # Obtenir les limites du monde avec une marge pour garder le joueur visible
         world_bounds = self.background.get_world_bounds()
-        world_width = world_bounds['max_x']
-        world_height = world_bounds['max_y']
+        margin_pixels = 64  # Marge de 6 pixels pour que le joueur (3x3) reste toujours visible aux bords
         
-        # Calculer le ratio d'échelle pour adapter le monde entier à la minimap
-        scale_x = minimap_width / world_width
-        scale_y = minimap_height / world_height
+        # Ajouter une marge virtuelle au monde pour le calcul de l'échelle
+        extended_world_width = world_bounds['max_x'] + (margin_pixels * 2)
+        extended_world_height = world_bounds['max_y'] + (margin_pixels * 2)
+        
+        # Calculer le ratio d'échelle pour adapter le monde étendu à la minimap
+        scale_x = minimap_width / extended_world_width
+        scale_y = minimap_height / extended_world_height
         scale = min(scale_x, scale_y)  # Utiliser le plus petit ratio pour garder les proportions
         
+        # Calculer l'offset pour centrer le monde réel dans la minimap étendue
+        offset_x = margin_pixels * scale
+        offset_y = margin_pixels * scale
+        
         # Dessiner le joueur (carré blanc avec transparence)
-        player_minimap_x = int(self.player.x * scale)
-        player_minimap_y = int(self.player.y * scale)
+        player_minimap_x = int(self.player.x * scale + offset_x)
+        player_minimap_y = int(self.player.y * scale + offset_y)
         player_color = (255, 255, 255, self.config.MINIMAP_ALPHA)
         player_half_size = self.config.MINIMAP_PLAYER_SIZE // 2
         pygame.draw.rect(minimap_surface, player_color, 
@@ -755,8 +799,8 @@ class Game:
         
         # Dessiner les ennemis (carrés rouges ou verts selon le type)
         for enemy in self.enemies:
-            enemy_minimap_x = int(enemy.x * scale)
-            enemy_minimap_y = int(enemy.y * scale)
+            enemy_minimap_x = int(enemy.x * scale + offset_x)
+            enemy_minimap_y = int(enemy.y * scale + offset_y)
             
             # Couleur selon le type d'ennemi
             if enemy.is_special:
@@ -776,3 +820,141 @@ class Game:
         
         # Afficher la minimap sur l'écran principal
         self.screen.blit(minimap_surface, (minimap_x, minimap_y))
+    
+    def draw_skills_screen(self):
+        """Affiche l'écran graphique des compétences et armes obtenues"""
+        # Overlay semi-transparent (20% de transparence sur 3/4 de l'écran)
+        overlay_width = int(self.config.WINDOW_WIDTH * 0.75)
+        overlay_height = int(self.config.WINDOW_HEIGHT * 0.75)
+        overlay_x = (self.config.WINDOW_WIDTH - overlay_width) // 2
+        overlay_y = (self.config.WINDOW_HEIGHT - overlay_height) // 2
+        overlay = pygame.Surface((overlay_width, overlay_height))
+        overlay.fill((20, 20, 40))
+        overlay.set_alpha(10)  # 20% de 255 = 51
+        self.screen.blit(overlay, (overlay_x, overlay_y))
+
+        # Titre
+        title = "Compétences & Armes"
+        title_surface = self.font.render(title, True, self.config.WHITE)
+        title_rect = title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 60))
+        self.screen.blit(title_surface, title_rect)
+
+        # Affichage des armes (7 slots)
+        slot_size = 64
+        slot_margin = 24
+        total_slots = 7
+        start_x = (self.config.WINDOW_WIDTH - (total_slots * slot_size + (total_slots-1)*slot_margin)) // 2
+        y = 150
+        for i in range(total_slots):
+            rect = pygame.Rect(start_x + i*(slot_size+slot_margin), y, slot_size, slot_size)
+            pygame.draw.rect(self.screen, (80,80,80), rect, border_radius=12)
+            # Si arme présente, dessiner une icône (exemple: orbe, éclair, etc.)
+            if hasattr(self, 'weapons') and i < len(self.weapons):
+                self.draw_weapon_icon(self.weapons[i], rect)
+            else:
+                pygame.draw.rect(self.screen, (40,40,40), rect.inflate(-16,-16), border_radius=8)
+
+        # Affichage des compétences (14 slots, 2 lignes de 7)
+        skill_slot_size = 48
+        skill_slot_margin = 18
+        total_skills = 14
+        start_x = (self.config.WINDOW_WIDTH - (7 * skill_slot_size + 6*skill_slot_margin)) // 2
+        y_skills = 270
+        for i in range(total_skills):
+            row = i // 7
+            col = i % 7
+            rect = pygame.Rect(start_x + col*(skill_slot_size+skill_slot_margin), y_skills + row*(skill_slot_size+skill_slot_margin), skill_slot_size, skill_slot_size)
+            pygame.draw.rect(self.screen, (100,100,100), rect, border_radius=10)
+            # Si compétence présente, dessiner une icône
+            if hasattr(self, 'skills') and i < len(self.skills):
+                self.draw_skill_icon(self.skills[i], rect)
+            else:
+                pygame.draw.rect(self.screen, (60,60,60), rect.inflate(-12,-12), border_radius=8)
+
+        # Instructions
+        text = "TAB - Reprendre le jeu"
+        text_surface = self.small_font.render(text, True, self.config.WHITE)
+        text_rect = text_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, self.config.WINDOW_HEIGHT-40))
+        self.screen.blit(text_surface, text_rect)
+
+    def draw_weapon_icon(self, weapon, rect):
+        # Exemple d'icône graphique selon le type d'arme (à adapter selon vos armes)
+        center = rect.center
+        if weapon == "orb":
+            pygame.draw.circle(self.screen, (0,200,255), center, rect.width//3)
+        elif weapon == "lightning":
+            pygame.draw.polygon(self.screen, (255,255,0), [
+                (center[0], center[1]-rect.height//4),
+                (center[0]+rect.width//6, center[1]),
+                (center[0], center[1]+rect.height//4),
+                (center[0]-rect.width//8, center[1]),
+            ])
+        # Ajouter d'autres armes ici
+        else:
+            pygame.draw.rect(self.screen, (180,180,180), rect.inflate(-20,-20), border_radius=6)
+
+    def draw_skill_icon(self, skill, rect):
+        # Exemple d'icône graphique selon le type de compétence (à adapter selon vos skills)
+        center = rect.center
+        pygame.draw.circle(self.screen, (120,255,120), center, rect.width//3)
+        # Ajouter d'autres styles selon le skill
+    
+    def trigger_upgrade_screen(self):
+        """Affiche l'écran de choix d'upgrade à la montée de niveau"""
+        self.show_upgrade_screen = True
+        self.paused = True
+        self.paused_skills = False
+        self.ban_mode = False
+        self.upgrade_options = random.sample(self.config.UPGRADE_POOL, 3)
+    
+    def get_upgrade_option_rects(self):
+        # Retourne les rects des 3 options pour la détection
+        screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
+        opt_w, opt_h = 220, 64
+        y = screen_h//2 - 80
+        return [pygame.Rect(screen_w//2-340+i*240, y, opt_w, opt_h) for i in range(3)]
+    
+    def draw_upgrade_screen(self):
+        """Affiche l'écran de choix d'upgrade"""
+        screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
+        overlay = pygame.Surface((int(screen_w*0.75), int(screen_h*0.75)))
+        overlay.fill((60, 60, 80) if not self.ban_mode else (80, 20, 20))
+        overlay.set_alpha(51)  # 20% de transparence
+        overlay_x = (screen_w - overlay.get_width()) // 2
+        overlay_y = (screen_h - overlay.get_height()) // 2
+        self.screen.blit(overlay, (overlay_x, overlay_y))
+        # Titre
+        title = "Choisissez une amélioration" if not self.ban_mode else "Bannissez une option"
+        title_surface = self.font.render(title, True, self.config.WHITE)
+        title_rect = title_surface.get_rect(center=(screen_w//2, overlay_y+60))
+        self.screen.blit(title_surface, title_rect)
+        # Options
+        for i, option in enumerate(self.upgrade_options):
+            rect = self.get_upgrade_option_rects()[i]
+            color = (180,220,255) if not self.ban_mode else (255,120,120)
+            pygame.draw.rect(self.screen, color, rect, border_radius=12)
+            opt_surface = self.small_font.render(option["name"], True, self.config.BLACK)
+            opt_rect = opt_surface.get_rect(center=rect.center)
+            self.screen.blit(opt_surface, opt_rect)
+        # Boutons
+        btn_w, btn_h = 120, 48
+        btn_y = screen_h//2 + 120
+        # ROLL
+        roll_rect = pygame.Rect(screen_w//2-200, btn_y, btn_w, btn_h)
+        roll_color = (200,200,200) if self.roll_count > 0 and not self.ban_mode else (100,100,100)
+        pygame.draw.rect(self.screen, roll_color, roll_rect, border_radius=10)
+        roll_text = f"ROLL ({self.roll_count})"
+        roll_surface = self.small_font.render(roll_text, True, self.config.BLACK)
+        self.screen.blit(roll_surface, roll_rect.move(20,10))
+        # BAN
+        ban_rect = pygame.Rect(screen_w//2-60, btn_y, btn_w, btn_h)
+        ban_color = (200,100,100) if self.ban_count > 0 and not self.ban_mode else (100,50,50)
+        pygame.draw.rect(self.screen, ban_color, ban_rect, border_radius=10)
+        ban_text = f"BAN ({self.ban_count})"
+        ban_surface = self.small_font.render(ban_text, True, self.config.BLACK)
+        self.screen.blit(ban_surface, ban_rect.move(20,10))
+        # SKIP
+        skip_rect = pygame.Rect(screen_w//2+80, btn_y, btn_w, btn_h)
+        pygame.draw.rect(self.screen, (180,180,180), skip_rect, border_radius=10)
+        skip_surface = self.small_font.render("SKIP", True, self.config.BLACK)
+        self.screen.blit(skip_surface, skip_rect.move(30,10))

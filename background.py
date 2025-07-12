@@ -168,8 +168,8 @@ class Background:
     def draw(self, screen, camera_x=0, camera_y=0):
         """Dessine l'arrière-plan avec optimisation (ne dessine que les tiles visibles)"""
         if not self.tiles:
-            # Fallback: fond coloré simple
-            screen.fill(self.config.GREEN)
+            # Fallback: fond coloré simple VISIBLE
+            screen.fill((0, 150, 0))  # Vert visible
             return
         
         # Calculer les tiles visibles

@@ -1,43 +1,5 @@
 # Last Man Standing - Jeu d'Action Temps Réel
-
-## 🎮 Description
-
-**Last Man Standing** est un jeu d'action temps réel développé en Python avec Pygame. Le joueur contrôle un personnage dans un monde procédural et doit survivre face à des vagues d'ennemis en utilisant diverses capacités offensives et défensives.
-
-## ✨ Fonctionnalités Actuelles
-
-### 🕹️ Gameplay
-- **Contrôles fluides** : Déplacement inertiel avec les touches WASD
-- **Combat automatique** : Tir automatique de projectiles Zap vers les ennemis proches
-- **Éclairs chaînés** : Attaque électrique automatique qui frappe plusieurs ennemis (portée 12 tiles)
-- **Orbes d'énergie** : Système d'orbes qui suivent le joueur et régénèrent l'énergie
-- **Progression** : Système d'XP et de niveaux avec amélioration des capacités
-
-### 🎨 Graphismes et Animation
-- **Sprite animé** : Personnage avec animation de vol utilisant une spritesheet ("Birds.png")
-- **Miroir directionnel** : Le sprite se retourne selon la direction du mouvement
-- **Terrain procédural** : Monde généré algorithmiquement avec un tileset 32x32 ("Tileset.png")
-- **Zones cohérentes** : Génération de biomes naturels avec transitions fluides
-- **Décorations dispersées** : Props placés aléatoirement pour enrichir le terrain
-
-### 🌍 Monde et Environnement
-- **Monde 100x100 tiles** : Terrain procédural avec seed reproductible
-- **Caméra intelligente** : Suivi du joueur avec délai et contraintes de limites
-- **Optimisation du rendu** : Affichage uniquement des tiles visibles
-- **Limites du monde** : Contraintes physiques empêchant le joueur de sortir
-
-### 🤖 Intelligence Artificielle
-- **IA ennemie** : Comportement de poursuite et d'attaque
-- **Génération intelligente** : Ennemis créés hors de la zone visible de la caméra
-- **Gestion des collisions** : Système de détection et de résolution des collisions
-
-### 🎯 Interface et Expérience
-- **Interface responsive** : Adaptée à différentes résolutions
-- **Affichage des stats** : Santé, énergie, niveau, XP
-- **Feedback visuel** : Indicateurs d'état et d'actions
-- **Performance optimisée** : Gestion efficace des ressources
-
-## 🏗️ Architecture du Code
+## Architecture du Code
 
 ```
 📁 python-LastManStanding/
@@ -51,22 +13,6 @@
 └── 📄 README.md         # Documentation
 ```
 
-## 🚀 Installation et Lancement
-
-### Prérequis
-- Python 3.7+
-- Pygame
-
-### Installation
-```bash
-pip install pygame
-```
-
-### Lancement
-```bash
-python main.py
-```
-
 ## 🎮 Contrôles
 
 | Touche | Action |
@@ -76,17 +22,6 @@ python main.py
 | S | Déplacement vers le bas |
 | D | Déplacement vers la droite |
 | ESC | Quitter le jeu |
-
-*Note : Le tir et les éclairs sont automatiques quand des ennemis sont à portée.*
-
-## 🔧 Configuration
-
-Le fichier `config.py` contient tous les paramètres ajustables :
-- Résolution d'écran
-- Vitesses de déplacement
-- Portées d'attaque
-- Couleurs et styles
-- Paramètres de gameplay
 
 ## 🎯 Améliorations Restantes à Implémenter
 
@@ -141,29 +76,3 @@ Le fichier `config.py` contient tous les paramètres ajustables :
 - [ ] **Multijoueur coopératif** : Jeu en équipe local ou en ligne
 - [ ] **Partage de mondes** : Possibilité de partager des seeds de terrain
 - [ ] **Classements en ligne** : Comparaison avec d'autres joueurs
-
-## 🐛 Problèmes Connus
-
-Aucun problème majeur identifié actuellement. Le jeu est stable et jouable.
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à :
-- Signaler des bugs
-- Proposer des améliorations
-- Soumettre du code
-- Créer des assets graphiques
-
-## 📜 Licence
-
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
-
-## 🎉 Remerciements
-
-- Pygame pour le framework de développement
-- La communauté open-source pour les ressources et l'inspiration
-- Les testeurs pour leurs retours constructifs
-
----
-
-*Dernière mise à jour : 6 juillet 2025*
