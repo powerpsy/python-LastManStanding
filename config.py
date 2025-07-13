@@ -48,12 +48,12 @@ class Config:
         # Paramètres des projectiles (adaptatifs)
         self.ZAP_SPEED = self.WINDOW_WIDTH * 0.01  # 1% de la largeur par frame
         self.ZAP_DAMAGE = 25
-        self.ZAP_FIRE_RATE = 100000  # frames entre chaque tir
+        self.ZAP_FIRE_RATE = 10  # frames entre chaque tir (6 tirs par seconde)
         self.ZAP_SIZE = 3  # Taille du point lumineux
         
         # Paramètres des éclairs (nouveau)
         self.LIGHTNING_DAMAGE = 50  # Plus de dégâts que les zaps
-        self.LIGHTNING_FIRE_RATE_BASE = 30  # 1 seconde de base à 60fps
+        self.LIGHTNING_FIRE_RATE_BASE = 300  # 1 seconde de base à 60fps
         self.LIGHTNING_FIRE_RATE_MIN = 6   # 0.1 seconde minimum à 60fps
         self.LIGHTNING_RANGE = self.WINDOW_WIDTH * 0.3  # 30% de la largeur
         self.LIGHTNING_DISPLAY_TIME = 6  # 0.1 seconde à 60fps

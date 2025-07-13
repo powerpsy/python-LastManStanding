@@ -23,6 +23,7 @@ class Game:
         self.paused_skills = False  # Nouvel état pour l'écran de compétences
         self.game_over = False
         self.score = 0
+        self.show_exit_menu = False  # Nouvel état pour la fenêtre de sortie
         
         # Entités
         self.player = Player(
@@ -91,6 +92,20 @@ class Game:
                     roll_rect = pygame.Rect(screen_w//2-200, btn_y, btn_w, btn_h)
                     ban_rect = pygame.Rect(screen_w//2-60, btn_y, btn_w, btn_h)
                     skip_rect = pygame.Rect(screen_w//2+80, btn_y, btn_w, btn_h)
+                    
+                    # Sélection d'une option d'upgrade (clic sur les options)
+                    if not self.ban_mode:
+                        for i, rect in enumerate(self.get_upgrade_option_rects()):
+                            if rect.collidepoint(mx, my):
+                                # Appliquer l'upgrade sélectionné
+                                selected_upgrade = self.upgrade_options[i]
+                                print(f"✨ Upgrade sélectionné: {selected_upgrade['name']}")
+                                # Fermer l'écran d'upgrade
+                                self.show_upgrade_screen = False
+                                self.paused = False
+                                self.ban_mode = False
+                                return
+                    
                     # ROLL
                     if roll_rect.collidepoint(mx, my) and self.roll_count > 0 and not self.ban_mode:
                         self.upgrade_options = random.sample(self.config.UPGRADE_POOL, 3)
@@ -113,7 +128,47 @@ class Game:
                                 self.ban_mode = False
                                 break
                 return
-            # ...existing code...
+            
+            elif event.type == pygame.KEYDOWN:
+                # Gestion de la fenêtre de compétences
+                if self.paused_skills:
+                    if event.key == pygame.K_TAB or event.key == pygame.K_ESCAPE:
+                        self.paused_skills = False
+                        self.paused = False
+                        return
+                # Gestion de la fenêtre de sortie
+                elif self.show_exit_menu:
+                    if event.key == pygame.K_ESCAPE:
+                        self.show_exit_menu = False
+                        self.paused = False
+                        return
+                # Ouverture de la fenêtre de compétences
+                elif event.key == pygame.K_TAB and not self.show_exit_menu and not self.show_upgrade_screen:
+                    self.paused_skills = True
+                    self.paused = True
+                    return
+                # Ouverture du menu de sortie
+                elif event.key == pygame.K_ESCAPE and not self.paused_skills and not self.show_upgrade_screen and not self.show_exit_menu:
+                    self.show_exit_menu = True
+                    self.paused = True
+                    return
+            
+            # Menu de sortie : détection des clics sur les boutons
+            elif self.show_exit_menu and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = pygame.mouse.get_pos()
+                if hasattr(self, "exit_menu_btn_rects"):
+                    for i, rect in enumerate(self.exit_menu_btn_rects):
+                        if rect.collidepoint(mx, my):
+                            if i == 0:  # QUIT
+                                self.running = False
+                            elif i == 1:  # RESTART
+                                self.show_exit_menu = False
+                                self.paused = False
+                                self.restart_game()
+                            elif i == 2:  # OPTION
+                                # À compléter : ouvrir un menu d'options si besoin
+                                pass
+                            return
 
     def update(self):
         """Met à jour la logique du jeu"""
@@ -143,8 +198,9 @@ class Game:
             self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE
             self.enemies_spawned = 0
             
-            # Déclencher l'écran d'upgrade
-            self.trigger_upgrade_screen()
+            # Déclencher l'écran d'upgrade seulement à partir de la vague 3
+            if self.wave_number >= 3:
+                self.trigger_upgrade_screen()
             
             # Progression des capacités tous les 5 niveaux
             self.update_abilities_progression()
@@ -203,54 +259,8 @@ class Game:
         # Vérification de sécurité : s'assurer d'avoir le bon nombre de boules
         self.ensure_correct_orb_count()
         
-        # Met à jour les zaps
-        for zap in self.zaps[:]:
-            zap.update()
-            
-            # Retirer les zaps qui sortent de la zone de caméra étendue
-            margin = 200  # Marge pour garder les projectiles un peu plus longtemps
-            if (zap.x < self.camera_x - margin or 
-                zap.x > self.camera_x + self.config.WINDOW_WIDTH + margin or 
-                zap.y < self.camera_y - margin or 
-                zap.y > self.camera_y + self.config.WINDOW_HEIGHT + margin):
-                self.zaps.remove(zap)
-                continue
-            
-            # Collision avec les ennemis
-            for enemy in self.enemies[:]:
-                if self.check_collision(zap, enemy):
-                    damage = int(self.config.ZAP_DAMAGE * self.bonus_manager.get_damage_multiplier())
-                    enemy.take_damage(damage)
-                    self.zaps.remove(zap)
-                    
-                    if enemy.health <= 0:
-                        # Appliquer bonus si c'est un ennemi spécial
-                        if enemy.is_special and enemy.bonus_type:
-                            self.bonus_manager.apply_bonus(enemy.bonus_type, self)
-                        
-                        # Vérifier que l'ennemi est encore dans la liste (au cas où le bonus l'aurait supprimé)
-                        if enemy in self.enemies:
-                            self.enemies.remove(enemy)
-                        self.score += self.config.SCORE_PER_ENEMY_KILL
-                    break
-        
-        # Met à jour les éclairs
-        for lightning in self.lightnings[:]:
-            if not lightning.update():
-                self.lightnings.remove(lightning)
-        
-        # Met à jour les particules
-        for particle in self.particles[:]:
-            if not particle.update():
-                self.particles.remove(particle)
-        
-        # Met à jour les boules d'énergie (avant le rendu pour éviter les interférences)
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
-        
-        for orb in self.energy_orbs[:]:
-            if not orb.update(player_center_x, player_center_y):
-                self.energy_orbs.remove(orb)
+        # Nettoyer toutes les entités (optimisé)
+        self.cleanup_entities()
     
     def spawn_enemy(self):
         """Crée un nouvel ennemi juste en dehors de la zone de caméra visible"""
@@ -372,7 +382,16 @@ class Game:
         enemy_center_x = closest_enemy.x + closest_enemy.size // 2
         enemy_center_y = closest_enemy.y + closest_enemy.size // 2
         
-        zap = Zap(player_center_x, player_center_y, enemy_center_x, enemy_center_y, self.config)
+        # Calculer la direction normalisée
+        direction_x = enemy_center_x - player_center_x
+        direction_y = enemy_center_y - player_center_y
+        direction_length = math.sqrt(direction_x**2 + direction_y**2)
+        
+        if direction_length > 0:
+            direction_x /= direction_length
+            direction_y /= direction_length
+        
+        zap = Zap(player_center_x, player_center_y, direction_x, direction_y, self.config)
         self.zaps.append(zap)
     
     def auto_lightning(self):
@@ -475,9 +494,14 @@ class Game:
             self.draw_upgrade_screen()
             pygame.display.flip()
             return
-        
+
         if self.paused_skills:
             self.draw_skills_screen()
+            pygame.display.flip()
+            return
+
+        if self.show_exit_menu:
+            self.draw_exit_menu()
             pygame.display.flip()
             return
         
@@ -489,56 +513,8 @@ class Game:
         self.background.draw(self.screen, camera_x, camera_y)
         
         if not self.game_over:
-            # Dessiner les entités (ordre d'arrière-plan vers premier plan)
-            
-            # Dessiner les ennemis en premier
-            for enemy in self.enemies:
-                enemy_screen_x = enemy.x - camera_x
-                enemy_screen_y = enemy.y - camera_y
-                temp_x, temp_y = enemy.x, enemy.y
-                enemy.x, enemy.y = enemy_screen_x, enemy_screen_y
-                enemy.draw(self.screen)
-                enemy.x, enemy.y = temp_x, temp_y
-            
-            # Dessiner les projectiles
-            for zap in self.zaps:
-                zap_screen_x = zap.x - camera_x
-                zap_screen_y = zap.y - camera_y
-                temp_x, temp_y = zap.x, zap.y
-                zap.x, zap.y = zap_screen_x, zap_screen_y
-                zap.draw(self.screen)
-                zap.x, zap.y = temp_x, temp_y
-            
-            # Dessiner les éclairs (derrière le joueur)
-            for lightning in self.lightnings:
-                # Les éclairs ont leurs propres coordonnées dans leurs points
-                lightning.draw(self.screen, camera_x, camera_y)
-            
-            # Dessiner les particules
-            for particle in self.particles:
-                particle_screen_x = particle.x - camera_x
-                particle_screen_y = particle.y - camera_y
-                temp_x, temp_y = particle.x, particle.y
-                particle.x, particle.y = particle_screen_x, particle_screen_y
-                particle.draw(self.screen)
-                particle.x, particle.y = temp_x, temp_y
-            
-            # Dessiner les boules d'énergie
-            for orb in self.energy_orbs:
-                orb_screen_x = orb.x - camera_x
-                orb_screen_y = orb.y - camera_y
-                temp_x, temp_y = orb.x, orb.y
-                orb.x, orb.y = orb_screen_x, orb_screen_y
-                orb.draw(self.screen)
-                orb.x, orb.y = temp_x, temp_y
-            
-            # Dessiner le joueur EN DERNIER (au premier plan)
-            player_screen_x = self.player.x - camera_x
-            player_screen_y = self.player.y - camera_y
-            temp_x, temp_y = self.player.x, self.player.y
-            self.player.x, self.player.y = player_screen_x, player_screen_y
-            self.player.draw(self.screen)
-            self.player.x, self.player.y = temp_x, temp_y
+            # Dessiner toutes les entités
+            self.draw_entities(camera_x, camera_y)
         
         # Minimap
         self.draw_minimap()
@@ -553,15 +529,47 @@ class Game:
         
         # TOUJOURS faire le flip pour afficher à l'écran
         pygame.display.flip()
-        # ...existing code...
-    
+
+    def draw_exit_menu(self):
+        """Dessine le menu de sortie avec boutons cliquables"""
+        screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
+        overlay = pygame.Surface((screen_w, screen_h))
+        overlay.set_alpha(160)
+        overlay.fill((20, 20, 20))
+        self.screen.blit(overlay, (0, 0))
+
+        # Titre
+        title = "Menu de sortie"
+        title_surface = self.font.render(title, True, self.config.WHITE)
+        title_rect = title_surface.get_rect(center=(screen_w//2, screen_h//2 - 120))
+        self.screen.blit(title_surface, title_rect)
+
+        # Boutons
+        btn_w, btn_h = 220, 60
+        btn_margin = 40
+        btn_names = ["QUIT", "RESTART", "OPTION"]
+        btn_rects = []
+        for i, name in enumerate(btn_names):
+            rect = pygame.Rect(
+                screen_w//2 - btn_w//2,
+                screen_h//2 - btn_h//2 + i*(btn_h + btn_margin),
+                btn_w, btn_h
+            )
+            btn_rects.append(rect)
+            color = (200, 60, 60) if name == "QUIT" else (60, 200, 120) if name == "RESTART" else (60, 120, 200)
+            pygame.draw.rect(self.screen, color, rect, border_radius=14)
+            text_surface = self.font.render(name, True, self.config.WHITE)
+            text_rect = text_surface.get_rect(center=rect.center)
+            self.screen.blit(text_surface, text_rect)
+
+        # Stocker les rects pour la détection dans handle_events
+        self.exit_menu_btn_rects = btn_rects
+
     def draw_ui(self):
         """Dessine l'interface utilisateur"""
-        # Barre de santé
-        health_ratio = max(0, self.player.health / self.player.max_health)
-        
-        # Couleur de la barre selon la santé
-        if health_ratio > 0.6:
+        # Calculer le ratio de santé et la couleur
+        health_ratio = self.player.health / self.player.max_health
+        if health_ratio > 0.7:
             health_color = self.config.GREEN
         elif health_ratio > 0.3:
             health_color = self.config.YELLOW
@@ -823,14 +831,14 @@ class Game:
     
     def draw_skills_screen(self):
         """Affiche l'écran graphique des compétences et armes obtenues"""
-        # Overlay semi-transparent (20% de transparence sur 3/4 de l'écran)
+        # Overlay semi-transparent (75% de transparence sur 3/4 de l'écran)
         overlay_width = int(self.config.WINDOW_WIDTH * 0.75)
         overlay_height = int(self.config.WINDOW_HEIGHT * 0.75)
         overlay_x = (self.config.WINDOW_WIDTH - overlay_width) // 2
         overlay_y = (self.config.WINDOW_HEIGHT - overlay_height) // 2
         overlay = pygame.Surface((overlay_width, overlay_height))
         overlay.fill((20, 20, 40))
-        overlay.set_alpha(10)  # 20% de 255 = 51
+        overlay.set_alpha(192)  # 75% de 255 = 192 (plus opaque et lisible)
         self.screen.blit(overlay, (overlay_x, overlay_y))
 
         # Titre
@@ -958,3 +966,121 @@ class Game:
         pygame.draw.rect(self.screen, (180,180,180), skip_rect, border_radius=10)
         skip_surface = self.small_font.render("SKIP", True, self.config.BLACK)
         self.screen.blit(skip_surface, skip_rect.move(30,10))
+
+    def draw_entity_with_camera_offset(self, entity, camera_x, camera_y):
+        """Dessine une entité en appliquant l'offset de caméra"""
+        entity_screen_x = entity.x - camera_x
+        entity_screen_y = entity.y - camera_y
+        temp_x, temp_y = entity.x, entity.y
+        entity.x, entity.y = entity_screen_x, entity_screen_y
+        entity.draw(self.screen)
+        entity.x, entity.y = temp_x, temp_y
+    
+    def draw_entities(self, camera_x, camera_y):
+        """Dessine toutes les entités du jeu avec l'offset de caméra"""
+        # Dessiner les ennemis en premier
+        for enemy in self.enemies:
+            self.draw_entity_with_camera_offset(enemy, camera_x, camera_y)
+        
+        # Dessiner les projectiles
+        for zap in self.zaps:
+            self.draw_entity_with_camera_offset(zap, camera_x, camera_y)
+        
+        # Dessiner les éclairs (derrière le joueur)
+        for lightning in self.lightnings:
+            # Les éclairs ont leurs propres coordonnées dans leurs points
+            lightning.draw(self.screen, camera_x, camera_y)
+        
+        # Dessiner les particules
+        for particle in self.particles:
+            self.draw_entity_with_camera_offset(particle, camera_x, camera_y)
+        
+        # Dessiner les boules d'énergie
+        for orb in self.energy_orbs:
+            self.draw_entity_with_camera_offset(orb, camera_x, camera_y)
+        
+        # Dessiner le joueur EN DERNIER (au premier plan)
+        self.draw_entity_with_camera_offset(self.player, camera_x, camera_y)
+
+    def cleanup_entities(self):
+        """Nettoie les entités et gère les collisions"""
+        margin = 200  # Marge pour garder les projectiles un peu plus longtemps
+        camera_bounds = {
+            'left': self.camera_x - margin,
+            'right': self.camera_x + self.config.WINDOW_WIDTH + margin,
+            'top': self.camera_y - margin,
+            'bottom': self.camera_y + self.config.WINDOW_HEIGHT + margin
+        }
+        
+        # Mettre à jour et gérer les collisions des zaps
+        zaps_to_remove = []
+        for zap in self.zaps:
+            zap.update()
+            
+            # Vérifier si hors limites
+            if not (camera_bounds['left'] <= zap.x <= camera_bounds['right'] and 
+                    camera_bounds['top'] <= zap.y <= camera_bounds['bottom']):
+                zaps_to_remove.append(zap)
+                continue
+            
+            # Collision avec les ennemis
+            for enemy in self.enemies[:]:
+                if self.check_collision(zap, enemy):
+                    damage = int(self.config.ZAP_DAMAGE * self.bonus_manager.get_damage_multiplier())
+                    enemy.take_damage(damage)
+                    zaps_to_remove.append(zap)
+                    
+                    if enemy.health <= 0:
+                        # Appliquer bonus si c'est un ennemi spécial
+                        if enemy.is_special and enemy.bonus_type:
+                            self.bonus_manager.apply_bonus(enemy.bonus_type, self)
+                        
+                        # Vérifier que l'ennemi est encore dans la liste
+                        if enemy in self.enemies:
+                            self.enemies.remove(enemy)
+                        self.score += self.config.SCORE_PER_ENEMY_KILL
+                    break
+        
+        # Supprimer les zaps marqués pour suppression
+        for zap in zaps_to_remove:
+            if zap in self.zaps:
+                self.zaps.remove(zap)
+        
+        # Nettoyer les éclairs (ils se suppriment automatiquement via update())
+        self.lightnings = [lightning for lightning in self.lightnings if lightning.update()]
+        
+        # Nettoyer les particules (elles se suppriment automatiquement via update())
+        self.particles = [particle for particle in self.particles if particle.update()]
+        
+        # Nettoyer les orbes d'énergie et gérer leurs collisions
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        
+        # Mettre à jour les orbes et vérifier les collisions avec les ennemis
+        for orb in self.energy_orbs[:]:
+            orb.update(player_center_x, player_center_y)
+            
+            # Vérifier les collisions avec les ennemis
+            for enemy in self.enemies[:]:
+                if self.check_collision(orb, enemy):
+                    # Infliger des dégâts à l'ennemi
+                    damage = int(self.config.ENERGY_ORB_DAMAGE * self.bonus_manager.get_damage_multiplier())
+                    enemy.take_damage(damage)
+                    
+                    # Créer des particules à l'impact
+                    impact_particles = []
+                    for i in range(5):
+                        particle = Particle(orb.x, orb.y, self.config)
+                        impact_particles.append(particle)
+                    self.particles.extend(impact_particles)
+                    
+                    if enemy.health <= 0:
+                        # Appliquer bonus si c'est un ennemi spécial
+                        if enemy.is_special and enemy.bonus_type:
+                            self.bonus_manager.apply_bonus(enemy.bonus_type, self)
+                        
+                        # Vérifier que l'ennemi est encore dans la liste
+                        if enemy in self.enemies:
+                            self.enemies.remove(enemy)
+                        self.score += self.config.SCORE_PER_ENEMY_KILL
+                    break  # Une orbe ne peut toucher qu'un ennemi à la fois
