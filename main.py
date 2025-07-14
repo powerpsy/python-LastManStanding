@@ -3,20 +3,6 @@
 Last Man Standing - Jeu d'Action 2D
 ===================================
 
-Un jeu d'action en temps réel où le joueur doit survivre à des vagues
-d'ennemis de plus en plus nombreuses et difficiles.
-
-Fonctionnalités:
-- Contrôles WASD avec inertie
-- Tir automatique d'éclairs vers les ennemis
-- Éclairs instantanés avec effets de particules
-- Boules d'énergie orbitales défensives
-- Ennemis qui suivent le joueur avec IA
-- Vagues progressives de difficulté croissante
-- Interface graphique paramétrable
-- Système de progression et d'upgrades
-
-Auteur: GitHub Copilot
 """
 
 import pygame

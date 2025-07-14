@@ -7,7 +7,7 @@ import random
 import math
 
 class Player:
-    """Classe du joueur avec déplacement à inertie"""
+    """Classe du joueur avec déplacement à inertie et animation directionnelle"""
     
     def __init__(self, x, y, config):
         self.x = x
@@ -23,20 +23,52 @@ class Player:
         self.vel_y = 0
         self.friction = config.PLAYER_FRICTION
         
-        # Charger l'image du joueur
+        # === SYSTÈME D'ANIMATION AVEC SPRITESHEET ===
+        self.facing_direction = "right"  # "left" ou "right"
+        self.last_movement_x = 0  # Pour détecter le changement de direction
+        
+        # Animation
+        self.animation_frames = []  # Liste des frames d'animation
+        self.animation_frames_left = []  # Frames pour la direction gauche
+        self.current_frame = 0
+        self.animation_timer = 0
+        self.frame_sequence = [0, 1, 2, 1]  # Séquence 1-2-3-2
+        self.sequence_index = 0
+        
+        # Charger la spritesheet Birds.png
         try:
-            self.player_image = pygame.image.load("Player.png").convert_alpha()
-            # Redimensionner l'image pour qu'elle corresponde à la taille du joueur
-            sprite_size = self.size * 2  # Facteur d'échelle pour une bonne visibilité
-            self.player_image = pygame.transform.scale(self.player_image, (sprite_size, sprite_size))
+            spritesheet = pygame.image.load("Birds.png").convert_alpha()
+            
+            # Dimensions des sprites individuels (64x64 pixels)
+            sprite_width = 64
+            sprite_height = 64
+            
+            sprite_size = self.size * 4  # Facteur d'échelle x2 supplémentaire pour une meilleure visibilité
+            
+            # Extraire les 3 premiers sprites (64x64 chacun)
+            for i in range(3):
+                # Extraire le sprite à la position (i * 64, 0)
+                frame_rect = pygame.Rect(i * sprite_width, 0, sprite_width, sprite_height)
+                frame = spritesheet.subsurface(frame_rect).copy()
+                
+                # Redimensionner le sprite
+                frame_scaled = pygame.transform.scale(frame, (sprite_size, sprite_size))
+                self.animation_frames.append(frame_scaled)
+                
+                # Créer la version miroir pour la gauche
+                frame_left = pygame.transform.flip(frame_scaled, True, False)
+                self.animation_frames_left.append(frame_left)
+            
             self.has_image = True
+            print(f"✅ Animation spritesheet du joueur activée (3 frames, séquence 1-2-3-2)")
         except (pygame.error, FileNotFoundError):
-            print("⚠️ Image Player.png non trouvée, utilisation du rendu par défaut")
-            self.player_image = None
+            print("⚠️ Spritesheet Birds.png non trouvée, utilisation du rendu par défaut")
+            self.animation_frames = []
+            self.animation_frames_left = []
             self.has_image = False
     
     def update(self, keys):
-        """Met à jour la position du joueur avec inertie"""
+        """Met à jour la position du joueur avec inertie et animation directionnelle"""
         # Accélération basée sur les touches
         accel_x = 0
         accel_y = 0
@@ -49,6 +81,13 @@ class Player:
             accel_x = -self.speed
         if keys[pygame.K_d]:
             accel_x = self.speed
+        
+        # === DÉTECTION DE DIRECTION ===
+        # Si le joueur se déplace horizontalement, mettre à jour la direction
+        if accel_x > 0:  # Mouvement vers la droite
+            self.facing_direction = "right"
+        elif accel_x < 0:  # Mouvement vers la gauche
+            self.facing_direction = "left"
         
         # Normalisation pour vitesse constante en diagonale
         if accel_x != 0 and accel_y != 0:
@@ -67,19 +106,41 @@ class Player:
         # Mettre à jour la position
         self.x += self.vel_x
         self.y += self.vel_y
+        
+        # === ANIMATION DES FRAMES ===
+        # Mettre à jour l'animation seulement si on a des frames
+        if self.has_image and self.animation_frames:
+            # Avancer le timer d'animation (compteur de frames)
+            self.animation_timer += 1
+            
+            # Changer de frame toutes les 9 frames de jeu (~6.7 FPS d'animation à 60 FPS)
+            if self.animation_timer >= 9:
+                self.animation_timer = 0
+                self.sequence_index = (self.sequence_index + 1) % len(self.frame_sequence)
+                self.current_frame = self.frame_sequence[self.sequence_index]
     
     def take_damage(self, damage):
         """Fait subir des dégâts au joueur"""
         self.health = max(0, self.health - damage)
     
     def draw(self, screen):
-        """Dessine le joueur"""
-        if self.has_image and self.player_image:
-            # Utiliser l'image du joueur centrée sur sa position
-            image_rect = self.player_image.get_rect()
-            # Centrer l'image sur les coordonnées du joueur
-            image_rect.center = (int(self.x + self.size//2), int(self.y + self.size//2))
-            screen.blit(self.player_image, image_rect)
+        """Dessine le joueur avec l'animation de spritesheet"""
+        if self.has_image and self.animation_frames and self.animation_frames_left:
+            # Choisir la bonne liste de frames selon la direction
+            current_frames = self.animation_frames_left if self.facing_direction == "right" else self.animation_frames
+            
+            # S'assurer que current_frame est dans les limites
+            if self.current_frame < len(current_frames):
+                current_image = current_frames[self.current_frame]
+                
+                # Utiliser l'image du joueur centrée sur sa position
+                image_rect = current_image.get_rect()
+                # Centrer l'image sur les coordonnées du joueur
+                image_rect.center = (int(self.x + self.size//2), int(self.y + self.size//2))
+                screen.blit(current_image, image_rect)
+            else:
+                # Fallback si problème avec les frames
+                self.current_frame = 0
         else:
             # Fallback : dessiner un cercle si l'image n'est pas disponible
             pygame.draw.circle(screen, self.config.PLAYER_COLOR,
@@ -90,6 +151,29 @@ class Player:
             pygame.draw.circle(screen, self.config.WHITE,
                              (int(self.x + self.size//2), int(self.y + self.size//2)),
                              self.size//2, 2)
+            
+            # === INDICATEUR DE DIRECTION EN MODE FALLBACK ===
+            # Dessiner un petit triangle pour indiquer la direction
+            center_x = int(self.x + self.size//2)
+            center_y = int(self.y + self.size//2)
+            triangle_size = self.size // 4
+            
+            if self.facing_direction == "right":
+                # Triangle pointant vers la droite
+                points = [
+                    (center_x + triangle_size, center_y),
+                    (center_x - triangle_size//2, center_y - triangle_size//2),
+                    (center_x - triangle_size//2, center_y + triangle_size//2)
+                ]
+            else:  # facing_direction == "left"
+                # Triangle pointant vers la gauche
+                points = [
+                    (center_x - triangle_size, center_y),
+                    (center_x + triangle_size//2, center_y - triangle_size//2),
+                    (center_x + triangle_size//2, center_y + triangle_size//2)
+                ]
+            
+            pygame.draw.polygon(screen, self.config.WHITE, points)
 
 
 class Enemy:

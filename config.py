@@ -28,6 +28,7 @@ class Config:
         # Couleurs spécifiques aux entités
         self.PLAYER_COLOR = self.CYAN
         self.ENEMY_COLOR = self.RED
+        self.SPECIAL_ENEMY_COLOR = self.ORANGE  # Couleur des ennemis spéciaux
         self.ZAP_COLOR = self.YELLOW
         self.HEALTH_COLOR_HIGH = self.GREEN
         self.HEALTH_COLOR_MID = self.YELLOW
@@ -35,33 +36,52 @@ class Config:
         
         # Paramètres du joueur (adaptatifs)
         self.PLAYER_SIZE = int(self.WINDOW_WIDTH * 0.02)  # 2% de la largeur
-        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.001  # Vitesse proportionnelle
+        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.0005  # Vitesse proportionnelle
         self.PLAYER_MAX_HEALTH = 100
         self.PLAYER_FRICTION = 0.85  # Inertie
         
         # Paramètres des ennemis (adaptatifs)
         self.ENEMY_SIZE = int(self.WINDOW_WIDTH * 0.015)  # 1.5% de la largeur
-        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.003  # Plus lent que le joueur
+        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.002  # Plus lent que le joueur
         self.ENEMY_HEALTH = 20
         self.ENEMY_DAMAGE = 10
+        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.1  # 10% de chance de spawn d'ennemi spécial
+        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 2.5  # Les ennemis spéciaux ont 2.5x plus de vie
         
-        # Paramètres des projectiles (adaptatifs)
-        self.ZAP_SPEED = self.WINDOW_WIDTH * 0.01  # 1% de la largeur par frame
-        self.ZAP_DAMAGE = 25
-        self.ZAP_FIRE_RATE = 10  # frames entre chaque tir (6 tirs par seconde)
+        # Types de bonus donnés par les ennemis spéciaux
+        self.BONUS_TYPES = [
+            "damage_boost",      # Augmentation temporaire des dégâts
+            "speed_boost",       # Augmentation temporaire de la vitesse
+            "shield",           # Bouclier temporaire
+            "lightning_boost",   # Amélioration temporaire des éclairs
+            "orb_boost"         # Amélioration temporaire des orbes
+        ]
+        
+        # Paramètres des bonus temporaires
+        self.BONUS_HEAL_AMOUNT = 30                    # Points de vie récupérés
+        self.BONUS_SHIELD_HITS = 3                     # Nombre de coups absorbés par le bouclier
+        self.BONUS_DOUBLE_DAMAGE_DURATION = 300       # 5 secondes à 60fps
+        self.BONUS_LIGHTNING_STORM_COUNT = 5           # Nombre d'éclairs dans la tempête
+        self.BONUS_SPEED_BOOST_MULTIPLIER = 1.5        # Multiplicateur de vitesse
+        self.BONUS_SPEED_BOOST_DURATION = 300          # 5 secondes à 60fps
+        self.BONUS_INVINCIBILITY_DURATION = 180        # 3 secondes à 60fps
+        self.BONUS_TIME_SLOW_DURATION = 300            # 5 secondes à 60fps
+        self.BONUS_TIME_SLOW_FACTOR = 0.5              # Facteur de ralentissement
+        self.BONUS_FREEZE_DURATION = 180               # 3 secondes à 60fps
+        
+        # Paramètres du canon (adaptatifs) - Valeurs de base seulement
+        self.ZAP_SPEED = self.WINDOW_WIDTH * 0.005  # 1% de la largeur par frame
         self.ZAP_SIZE = 3  # Taille du point lumineux
+        self.ZAP_DAMAGE = 25  # Compatibilité avec l'ancien code
+        self.ZAP_FIRE_RATE = 60  # Compatibilité avec l'ancien code
         
-        # Paramètres des éclairs (nouveau)
-        self.LIGHTNING_DAMAGE = 50  # Plus de dégâts que les zaps
-        self.LIGHTNING_FIRE_RATE_BASE = 300  # 1 seconde de base à 60fps
-        self.LIGHTNING_FIRE_RATE_MIN = 6   # 0.1 seconde minimum à 60fps
+        # Paramètres des lightning (nouveau) - Valeurs de base seulement
         self.LIGHTNING_RANGE = self.WINDOW_WIDTH * 0.3  # 30% de la largeur
         self.LIGHTNING_DISPLAY_TIME = 6  # 0.1 seconde à 60fps
         self.LIGHTNING_COLOR = (255, 255, 255)  # Blanc éclatant
         self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)  # Bleu clair
-        self.LIGHTNING_CHAIN_CHANCE = 0.5  # 50% de chance de chaîner sur un second ennemi
         self.LIGHTNING_CHAIN_RANGE = self.WINDOW_WIDTH * 0.2  # 20% de la largeur pour le chaînage
-        self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)  # Bleu clair
+        self.LIGHTNING_DAMAGE = 50  # Compatibilité avec l'ancien code
         
         # Paramètres des particules d'explosion
         self.PARTICLE_COUNT = 8  # Nombre de particules par explosion
@@ -76,16 +96,13 @@ class Config:
             (255, 192, 203)  # Rose
         ]
         
-        # Paramètres des boules d'énergie orbitales (nouveau)
-        self.ENERGY_ORB_DAMAGE = 40  # Dégâts des boules d'énergie
+        # Paramètres des orb orbitales (nouveau) - Valeurs de base seulement
         self.ENERGY_ORB_SPEED = 2 * 3.14159 / 60  # 1 tour/seconde constant
         self.ENERGY_ORB_RADIUS = self.WINDOW_WIDTH * 0.08  # 8% de la largeur
         self.ENERGY_ORB_SIZE = int(self.WINDOW_WIDTH * 0.01)  # 1% de la largeur
         self.ENERGY_ORB_COLOR = (138, 43, 226)  # Violet/Pourpre
         self.ENERGY_ORB_GLOW_COLOR = (255, 0, 255)  # Magenta lumineux
-        self.ENERGY_ORB_MAX_COUNT_BASE = 1  # Nombre de départ (niveau 1)
-        self.ENERGY_ORB_MAX_COUNT_FINAL = 7  # Maximum final possible (niveau 7)
-        self.ENERGY_ORB_PROGRESSION_INTERVAL = 1  # Nouvelle orbe à chaque niveau
+        self.ENERGY_ORB_DAMAGE = 40  # Compatibilité avec l'ancien code
         
         # Interface utilisateur
         self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur
@@ -106,23 +123,34 @@ class Config:
         
         # Scores et progression
         self.SCORE_PER_ENEMY_KILL = 10      # Points par ennemi tué
-        self.SCORE_PER_LIGHTNING_KILL = 15  # Points bonus pour les kills par éclair
+        self.SCORE_PER_LIGHTNING_KILL = 15  # Points bonus pour les kills par lightning
         self.SCORE_WAVE_BONUS_MULTIPLIER = 100  # Bonus de points par vague
     
-        # Options d'upgrade disponibles
+        # Options d'upgrade disponibles - Nouvelles améliorations d'armes
         self.UPGRADE_POOL = [
+            # Améliorations générales du joueur
             {"id": "speed", "name": "Vitesse +20%", "description": "Augmente la vitesse de déplacement"},
-            {"id": "fire_rate", "name": "Cadence +30%", "description": "Tire plus rapidement"},
-            {"id": "damage", "name": "Dégâts +25%", "description": "Les éclairs font plus de dégâts"},
-            {"id": "orb_damage", "name": "Orbes +40%", "description": "Les orbes font plus de dégâts"},
-            {"id": "orb_count", "name": "Orbe supplémentaire", "description": "Ajoute une orbe défensive"},
-            {"id": "lightning_pierce", "name": "Éclair perforant", "description": "Les éclairs traversent les ennemis"},
             {"id": "healing", "name": "Régénération", "description": "Récupère de la vie au fil du temps"},
             {"id": "shield", "name": "Bouclier temporaire", "description": "Protection contre les dégâts"},
-            {"id": "explosion", "name": "Éclairs explosifs", "description": "Les éclairs explosent à l'impact"},
             {"id": "magnet", "name": "Aimant", "description": "Attire les objets à distance"},
-            {"id": "multishot", "name": "Tir multiple", "description": "Tire plusieurs éclairs"},
-            {"id": "freeze", "name": "Ralentissement", "description": "Les ennemis touchés ralentissent"},
+            
+            # Améliorations du canon (Zaps)
+            {"id": "zap_damage", "name": "Canon +30%", "description": "Le canon fait plus de dégâts"},
+            {"id": "zap_fire_rate", "name": "Cadence canon +40%", "description": "Tire plus rapidement"},
+            {"id": "zap_range", "name": "Portée canon +50%", "description": "Portée du canon augmentée"},
+            {"id": "zap_pierce", "name": "Canon perforant", "description": "Le canon traverse les ennemis"},
+            
+            # Améliorations des lightning
+            {"id": "lightning_damage", "name": "Lightning +40%", "description": "Les lightning font plus de dégâts"},
+            {"id": "lightning_fire_rate", "name": "Cadence lightning +50%", "description": "Lightning plus fréquents"},
+            {"id": "lightning_chain", "name": "Chaîne lightning +1", "description": "Les lightning chaînent sur plus d'ennemis"},
+            {"id": "lightning_storm", "name": "Tempête de lightning", "description": "Lightning multiples simultanés"},
+            
+            # Améliorations des orb
+            {"id": "orb_count", "name": "Orb supplémentaire", "description": "Ajoute une orb défensive"},
+            {"id": "orb_damage", "name": "Orb +50%", "description": "Les orb font plus de dégâts"},
+            {"id": "orb_speed", "name": "Orb rapides", "description": "Les orb tournent plus vite"},
+            {"id": "orb_size", "name": "Orb géantes", "description": "Orb plus grandes et plus de dégâts"},
         ]
         
         # Configuration de la minimap
@@ -132,33 +160,42 @@ class Config:
         self.MINIMAP_PLAYER_SIZE = 4  # Légèrement plus grand
         self.MINIMAP_ENEMY_SIZE = 3   # Légèrement plus grand
         
-        # Configuration des ennemis spéciaux
-        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.1
-        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 3.0
-        self.SPECIAL_ENEMY_DAMAGE_MULTIPLIER = 1.5
-        self.SPECIAL_ENEMY_SPEED_MULTIPLIER = 0.8
-        self.SPECIAL_ENEMY_COLOR = (255, 100, 0)  # Orange pour les distinguer
+    def recalculate_adaptive_sizes(self):
+        """Recalcule les tailles adaptatives après un redimensionnement"""
+        # Recalculer les facteurs d'échelle pour l'interface
+        self.ui_scale = min(self.WINDOW_WIDTH / 1920, self.WINDOW_HEIGHT / 1080)
+        self.font_scale = max(0.5, self.ui_scale)  # Échelle minimum pour la lisibilité
         
-        # Paramètres des bonus
-        self.BONUS_HEAL_AMOUNT = 20             # Points de vie restaurés
-        self.BONUS_SHIELD_HITS = 1              # Nombre de coups bloqués
-        self.BONUS_DOUBLE_DAMAGE_DURATION = 600 # 10 secondes à 60fps
-        self.BONUS_LIGHTNING_STORM_COUNT = 5    # Nombre d'éclairs
-        self.BONUS_SPEED_BOOST_DURATION = 480   # 8 secondes à 60fps
-        self.BONUS_SPEED_BOOST_MULTIPLIER = 2.0 # Multiplicateur de vitesse
-        self.BONUS_INVINCIBILITY_DURATION = 180 # 3 secondes à 60fps
-        self.BONUS_TIME_SLOW_DURATION = 480     # 8 secondes à 60fps
-        self.BONUS_TIME_SLOW_FACTOR = 0.3       # Facteur de ralentissement
-        self.BONUS_FREEZE_DURATION = 240        # 4 secondes à 60fps
+        # Recalculer les paramètres du joueur
+        self.PLAYER_SIZE = int(self.WINDOW_WIDTH * 0.02)
+        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.001
         
-        # Types de bonus disponibles
-        self.BONUS_TYPES = [
-            "heal",
-            "shield", 
-            "double_damage",
-            "lightning_storm",
-            "speed_boost",
-            "invincibility",
-            "time_slow",
-            "freeze"
-        ]
+        # Recalculer les paramètres des ennemis
+        self.ENEMY_SIZE = int(self.WINDOW_WIDTH * 0.015)
+        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.003
+        
+        # Recalculer les paramètres du canon
+        self.ZAP_SPEED = self.WINDOW_WIDTH * 0.01
+        self.ZAP_SIZE = int(self.WINDOW_WIDTH * 0.008)
+        
+        # Recalculer les paramètres des lightning
+        self.LIGHTNING_SIZE = int(self.WINDOW_WIDTH * 0.015)
+        
+        # Recalculer les paramètres des particules
+        self.PARTICLE_SIZE = max(2, int(self.WINDOW_WIDTH * 0.005))
+        self.PARTICLE_SPEED = self.WINDOW_WIDTH * 0.002
+        
+        # Recalculer les paramètres des orb
+        self.ENERGY_ORB_RADIUS = self.WINDOW_WIDTH * 0.08
+        self.ENERGY_ORB_SIZE = int(self.WINDOW_WIDTH * 0.01)
+        
+        # Recalculer les paramètres de l'interface utilisateur
+        self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur
+        self.HEALTH_BAR_HEIGHT = int(self.WINDOW_HEIGHT * 0.02)  # 2% de la hauteur
+        self.UI_MARGIN = int(self.WINDOW_WIDTH * 0.01)  # 1% de marge
+        
+        # Recalculer les paramètres de la minimap
+        self.MINIMAP_SIZE_RATIO = 6.0
+        self.MINIMAP_MARGIN = int(self.WINDOW_WIDTH * 0.01)
+        
+        print(f"📐 Tailles recalculées - Joueur: {self.PLAYER_SIZE}, Ennemis: {self.ENEMY_SIZE}, Orbes: {self.ENERGY_ORB_SIZE}")
