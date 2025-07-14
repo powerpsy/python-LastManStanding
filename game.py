@@ -1,9 +1,9 @@
 import pygame
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb, BonusManager
+from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb, BonusManager, Beam
 from background import Background
-from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, SpeedSkill, ShieldSkill, RegenSkill
+from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, ShieldSkill, RegenSkill
 
 class Game:
     """Classe principale du jeu"""
@@ -35,6 +35,7 @@ class Game:
         self.enemies = []
         self.zaps = []
         self.lightnings = []  # Nouvelle liste pour les éclairs
+        self.beams = []       # Nouvelle liste pour les rayons laser
         self.particles = []   # Nouvelle liste pour les particules
         self.energy_orbs = []  # Nouvelle liste pour les boules d'énergie
         
@@ -274,10 +275,16 @@ class Game:
                 if weapon.name == "Canon":  # CORRIGÉ: "Canon" au lieu de "Cannon"
                     weapon.fire(self.player, self.enemies, self.zaps, self.config)
                 elif weapon.name == "Lightning":
-                    weapon.fire(self.player, self.enemies, self.lightnings, self.config)
+                    hit_positions = weapon.fire(self.player, self.enemies, self.lightnings, self.config)
+                    # Créer des effets d'explosion pour chaque ennemi touché
+                    if hit_positions:
+                        for x, y in hit_positions:
+                            self.create_explosion_particles(x, y)
+                elif weapon.name == "Beam":
+                    weapon.fire(self.player, self.enemies, self.beams, self.config)
                 elif weapon.name == "Orb":
                     # Les orb ne tirent pas de projectiles, elles orbitent
-                    pass
+                    weapon.update_orbs(self.player.x, self.player.y, self.player.size)
         
         # Appliquer les effets des compétences passives
         self.skill_manager.apply_all_effects(self.player, self.config)
@@ -531,11 +538,22 @@ class Game:
             self.particles.append(particle)
     
     def check_collision(self, obj1, obj2):
-        """Vérifie la collision entre deux objets"""
-        return (obj1.x < obj2.x + obj2.size and
-                obj1.x + obj1.size > obj2.x and
-                obj1.y < obj2.y + obj2.size and
-                obj1.y + obj1.size > obj2.y)
+        """Vérifie la collision circulaire entre deux objets"""
+        # Calculer les centres des objets
+        obj1_center_x = obj1.x + obj1.size // 2
+        obj1_center_y = obj1.y + obj1.size // 2
+        obj2_center_x = obj2.x + obj2.size // 2
+        obj2_center_y = obj2.y + obj2.size // 2
+        
+        # Calculer la distance entre les centres
+        distance = math.sqrt((obj1_center_x - obj2_center_x)**2 + (obj1_center_y - obj2_center_y)**2)
+        
+        # Rayons des cercles (rayon = largeur du sprite / 2)
+        obj1_radius = obj1.size // 2  # Pour un sprite 32x32, rayon = 16
+        obj2_radius = obj2.size // 2  # Pour un sprite 32x32, rayon = 16
+        
+        # Collision si la distance est inférieure à la somme des rayons
+        return distance < (obj1_radius + obj2_radius)
     
     def draw(self):
         """Dessine tous les éléments du jeu"""
@@ -628,23 +646,24 @@ class Game:
         else:
             health_color = self.config.RED
         
+        # Calculer les dimensions et position centrée de la barre de vie (2x plus grande)
+        health_bar_width = self.config.HEALTH_BAR_WIDTH * 2
+        health_bar_height = self.config.HEALTH_BAR_HEIGHT * 2
+        health_bar_x = (self.config.WINDOW_WIDTH - health_bar_width) // 2
+        health_bar_y = 10  # Plus proche du haut de l'écran
+        
         # Fond de la barre de santé
-        health_bg_rect = pygame.Rect(10, 10, self.config.HEALTH_BAR_WIDTH, self.config.HEALTH_BAR_HEIGHT)
+        health_bg_rect = pygame.Rect(health_bar_x, health_bar_y, health_bar_width, health_bar_height)
         pygame.draw.rect(self.screen, self.config.GRAY, health_bg_rect)
         
         # Barre de santé actuelle
-        health_width = int(self.config.HEALTH_BAR_WIDTH * health_ratio)
+        health_width = int(health_bar_width * health_ratio)
         if health_width > 0:
-            health_rect = pygame.Rect(10, 10, health_width, self.config.HEALTH_BAR_HEIGHT)
+            health_rect = pygame.Rect(health_bar_x, health_bar_y, health_width, health_bar_height)
             pygame.draw.rect(self.screen, health_color, health_rect)
         
         # Contour de la barre
         pygame.draw.rect(self.screen, self.config.WHITE, health_bg_rect, 2)
-        
-        # Textes (pré-calculer les surfaces)
-        health_text = f"HP: {self.player.health}/{self.player.max_health}"
-        health_surface = self.small_font.render(health_text, True, self.config.WHITE)
-        self.screen.blit(health_surface, (10, 35))
         
         wave_text = f"Vague {self.wave_number} - Ennemis: {len(self.enemies)}"
         wave_surface = self.font.render(wave_text, True, self.config.WHITE)
@@ -811,8 +830,7 @@ class Game:
             for skill in self.skill_manager.skills:
                 skill_text = f"• {skill.name} Niveau {skill.level}"
                 skill_surface = self.small_font.render(skill_text, True, self.config.WHITE)
-                skill_rect = skill_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
-                self.screen.blit(skill_surface, skill_rect)
+                self.screen.blit(skill_surface, (self.config.WINDOW_WIDTH//2 - 100, y_offset))
                 y_offset += 20
         
         # === INSTRUCTIONS ===
@@ -874,6 +892,7 @@ class Game:
         self.enemies.clear()
         self.zaps.clear()
         self.lightnings.clear()  # Nouveau
+        self.beams.clear()       # Nouveau
         self.particles.clear()   # Nouveau
         self.energy_orbs.clear()  # Nouveau
         
@@ -905,23 +924,22 @@ class Game:
             if len(self.energy_orbs) > 0:
                 self.energy_orbs.clear()
             return
-            
-        expected_orb_count = self.current_energy_orb_max
         
-        # Si le nombre d'orb ne correspond pas, les recréer toutes
-        if len(self.energy_orbs) != expected_orb_count:
-            self.energy_orbs.clear()
-            self.recreate_all_energy_orbs()
+        # Laisser le système OOP gérer les orbes via OrbWeapon
+        orb_weapon = None
+        for weapon in self.weapon_manager.weapons:
+            if weapon.name == "Orb":
+                orb_weapon = weapon
+                break
+        
+        if orb_weapon:
+            # Synchroniser la liste legacy avec les orbes OOP
+            self.energy_orbs = orb_weapon.orbs
     
     def recreate_all_energy_orbs(self):
-        """Recrée toutes les orb avec les positions optimales"""
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
-        
-        # Créer toutes les orb avec une répartition uniforme
-        for i in range(self.current_energy_orb_max):
-            orb = EnergyOrb(player_center_x, player_center_y, i, self.current_energy_orb_max, self.config)
-            self.energy_orbs.append(orb)
+        """Méthode legacy - maintenant gérée par OrbWeapon"""
+        # Cette méthode n'est plus nécessaire avec le système OOP
+        pass
     
     def draw_minimap(self):
         """Dessine une minimap en bas à droite de la fenêtre"""
@@ -1167,6 +1185,10 @@ class Game:
             # Les lightning ont leurs propres coordonnées dans leurs points
             lightning.draw(self.screen, camera_x, camera_y)
         
+        # Dessiner les beams (rayons laser)
+        for beam in self.beams:
+            beam.draw(self.screen, camera_x, camera_y)
+        
         # Dessiner les particules
         for particle in self.particles:
             self.draw_entity_with_camera_offset(particle, camera_x, camera_y)
@@ -1226,6 +1248,18 @@ class Game:
         # Nettoyer les éclairs (ils se suppriment automatiquement via update())
         self.lightnings = [lightning for lightning in self.lightnings if lightning.update()]
         
+        # Mettre à jour et gérer les collisions des beams
+        active_beams = []
+        for beam in self.beams:
+            if beam.update():
+                # Vérifier les collisions avec les ennemis
+                hit_positions = beam.check_collision_with_enemies(self.enemies)
+                # Créer des effets d'explosion pour chaque ennemi touché
+                for x, y in hit_positions:
+                    self.create_explosion_particles(x, y)
+                active_beams.append(beam)
+        self.beams = active_beams
+        
         # Nettoyer les particules (elles se suppriment automatiquement via update())
         self.particles = [particle for particle in self.particles if particle.update()]
         
@@ -1270,15 +1304,15 @@ class Game:
         # === NOUVELLES ARMES ===
         if upgrade_id == "weapon_lightning":
             if self.weapon_manager.add_weapon(LightningWeapon):
-                print("⚡� LIGHTNING DÉBLOQUÉ ! Nouvelle arme disponible !")
+                print("⚡ LIGHTNING DÉBLOQUÉ ! Nouvelle arme disponible !")
             else:
                 print("❌ Impossible d'ajouter Lightning : limite d'armes atteinte")
         
-        elif upgrade_id == "weapon_orb":
-            if self.weapon_manager.add_weapon(OrbWeapon):
-                print("�🆕 ORB DÉBLOQUÉ ! Nouvelle arme disponible !")
+        elif upgrade_id == "weapon_beam":
+            if self.weapon_manager.add_weapon(BeamWeapon):
+                print("🔴 BEAM DÉBLOQUÉ ! Nouvelle arme disponible !")
             else:
-                print("❌ Impossible d'ajouter Orb : limite d'armes atteinte")
+                print("❌ Impossible d'ajouter Beam : limite d'armes atteinte")
         
         # === AMÉLIORATIONS D'ARMES ===
         elif upgrade_id.startswith("upgrade_weapon_"):
@@ -1335,11 +1369,11 @@ class Game:
                 "is_new_weapon": True
             })
         
-        if not self.weapon_manager.has_weapon("Orb") and len(self.weapon_manager.weapons) < 7:
+        if not self.weapon_manager.has_weapon("Beam") and len(self.weapon_manager.weapons) < 7:
             available_upgrades.append({
-                "id": "weapon_orb", 
-                "name": "🆕 DÉBLOQUER: Orb", 
-                "description": "Nouvelle arme: Orb défensives orbitales !",
+                "id": "weapon_beam", 
+                "name": "🆕 DÉBLOQUER: Beam", 
+                "description": "Nouvelle arme: Rayon laser qui traverse les ennemis !",
                 "is_new_weapon": True
             })
         
@@ -1389,7 +1423,8 @@ class Game:
                 })
         
         # Retourner 3 options aléatoirement choisies (ou moins s'il n'y en a pas assez)
-        return random.sample(available_upgrades, min(3, len(available_upgrades)))
+        result = random.sample(available_upgrades, min(3, len(available_upgrades)))
+        return result
     
     def handle_window_resize(self, new_width, new_height):
         """Gère le redimensionnement de la fenêtre"""

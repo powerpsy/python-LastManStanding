@@ -56,6 +56,23 @@ class WeaponConfig:
         "orbit_speed_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
         "radius_progression": [1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3]
     }
+    
+    # === BEAM ===
+    BEAM = {
+        "name": "Beam",
+        "max_level": 10,
+        "base_damage": 15,  # Dégâts par frame (continu)
+        "base_fire_rate": 120,  # frames entre les activations (2 secondes)
+        "base_range": 500,
+        "base_width": 12,  # Largeur du faisceau en pixels
+        "beam_duration": 60,  # Durée du faisceau en frames (1 seconde)
+        
+        # Progressions par niveau
+        "damage_progression": [1.0, 1.25, 1.56, 1.95, 2.44, 3.05, 3.81, 4.76, 5.95, 7.44],
+        "fire_rate_progression": [1.0, 0.9, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39],  # Plus bas = plus rapide
+        "range_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
+        "width_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]
+    }
 
 
 class SkillConfig:

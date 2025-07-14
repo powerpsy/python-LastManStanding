@@ -1,19 +1,13 @@
 import pygame
 
 class Config:
-    """Configuration du jeu avec paramètres adaptatifs"""
+    """Configuration du jeu avec 3 presets de résolution fixes"""
     
-    def __init__(self):
-        # Dimensions de la fenêtre
-        self.WINDOW_WIDTH = 1920 // 2  # 960 pixels
-        self.WINDOW_HEIGHT = 1080 // 2  # 540 pixels
-        self.FPS = 60
+    def __init__(self, forced_screen_size=None):
+        # Détecter la résolution de l'écran pour choisir le meilleur preset
+        self.detect_and_set_resolution(forced_screen_size)
         
-        # Facteurs d'échelle pour l'interface
-        self.ui_scale = min(self.WINDOW_WIDTH / 1920, self.WINDOW_HEIGHT / 1080)
-        self.font_scale = max(0.5, self.ui_scale)  # Échelle minimum pour la lisibilité
-        
-        # Couleurs principales
+        # Couleurs principales (fixes pour tous les presets)
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
         self.GRAY = (128, 128, 128)
@@ -28,25 +22,292 @@ class Config:
         # Couleurs spécifiques aux entités
         self.PLAYER_COLOR = self.CYAN
         self.ENEMY_COLOR = self.RED
-        self.SPECIAL_ENEMY_COLOR = self.ORANGE  # Couleur des ennemis spéciaux
+        self.SPECIAL_ENEMY_COLOR = self.ORANGE
         self.ZAP_COLOR = self.YELLOW
         self.HEALTH_COLOR_HIGH = self.GREEN
         self.HEALTH_COLOR_MID = self.YELLOW
         self.HEALTH_COLOR_LOW = self.RED
         
-        # Paramètres du joueur (adaptatifs)
-        self.PLAYER_SIZE = int(self.WINDOW_WIDTH * 0.02)  # 2% de la largeur
-        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.0005  # Vitesse proportionnelle
-        self.PLAYER_MAX_HEALTH = 100
-        self.PLAYER_FRICTION = 0.85  # Inertie
+        # FPS fixe pour tous les presets
+        self.FPS = 60
         
-        # Paramètres des ennemis (adaptatifs)
-        self.ENEMY_SIZE = int(self.WINDOW_WIDTH * 0.015)  # 1.5% de la largeur
-        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.002  # Plus lent que le joueur
+        # Paramètres de jeu fixes
+        self.PLAYER_MAX_HEALTH = 100
+        self.PLAYER_FRICTION = 0.85
         self.ENEMY_HEALTH = 20
         self.ENEMY_DAMAGE = 10
-        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.1  # 10% de chance de spawn d'ennemi spécial
-        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 2.5  # Les ennemis spéciaux ont 2.5x plus de vie
+        self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.1
+        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 2.5
+    
+    def detect_and_set_resolution(self, forced_screen_size=None):
+        """Détecte la résolution d'écran et applique le preset approprié"""
+        if forced_screen_size is not None:
+            # Mode forcé pour les tests
+            if forced_screen_size == 1:
+                self.apply_preset_1280x720()
+                print(f"🧪 Mode test: Preset 1280x720 forcé")
+            elif forced_screen_size == 2:
+                self.apply_preset_1920x1080()
+                print(f"🧪 Mode test: Preset 1920x1080 forcé")
+            elif forced_screen_size == 3:
+                self.apply_preset_2560x1440()
+                print(f"🧪 Mode test: Preset 2560x1440 forcé")
+            else:
+                print(f"⚠️ Taille d'écran forcée invalide: {forced_screen_size}. Utilisation de la détection automatique.")
+                forced_screen_size = None
+        
+        if forced_screen_size is None:
+            # Obtenir la résolution de l'écran
+            pygame.init()
+            info = pygame.display.Info()
+            screen_width = info.current_w
+            screen_height = info.current_h
+            
+            # Choisir le preset le plus approprié
+            if screen_width >= 2560 and screen_height >= 1440:
+                self.apply_preset_2560x1440()
+            elif screen_width >= 1920 and screen_height >= 1080:
+                self.apply_preset_1920x1080()
+            else:
+                self.apply_preset_1280x720()
+            
+            print(f"🖥️ Résolution détectée: {screen_width}x{screen_height}")
+        
+        print(f"📐 Preset appliqué: {self.WINDOW_WIDTH}x{self.WINDOW_HEIGHT}")
+    
+    def apply_preset_2560x1440(self):
+        """Preset optimisé pour 2560x1440 (1440p)"""
+        # Fenêtre
+        self.WINDOW_WIDTH = 2560
+        self.WINDOW_HEIGHT = 1440
+        self.SCREEN_WIDTH = self.WINDOW_WIDTH
+        self.SCREEN_HEIGHT = self.WINDOW_HEIGHT
+        
+        # Entités - Tailles fixes optimisées
+        self.PLAYER_SIZE = 48  # Plus grand pour 1440p
+        self.ENEMY_SIZE = 40   # Sprites 40x40 pour meilleure visibilité
+        
+        # Vitesses
+        self.PLAYER_SPEED = 4.0
+        self.ENEMY_SPEED = 2.5
+        
+        # Projectiles
+        self.ZAP_SIZE = 6
+        self.ZAP_SPEED = 12.0
+        self.LIGHTNING_SIZE = 40
+        
+        # Particules
+        self.PARTICLE_SIZE = 4
+        self.PARTICLE_SPEED = 3.0
+        self.PARTICLE_COUNT = 8
+        
+        # Orbes d'énergie
+        self.ENERGY_ORB_SIZE = 24
+        self.ENERGY_ORB_RADIUS = 120
+        self.ENERGY_ORB_SPEED = 0.08
+        
+        # Interface utilisateur
+        self.HEALTH_BAR_WIDTH = 400
+        self.HEALTH_BAR_HEIGHT = 24
+        self.UI_MARGIN = 20
+        
+        # Police et texte
+        self.font_scale = 1.5
+        
+        # Minimap
+        self.MINIMAP_SIZE_RATIO = 8.0
+        self.MINIMAP_MARGIN = 30
+        self.MINIMAP_PLAYER_SIZE = 8
+        self.MINIMAP_ENEMY_SIZE = 6
+        self.MINIMAP_ALPHA = 180
+        
+        # Appliquer les paramètres communs
+        self.apply_common_parameters()
+    
+    def apply_preset_1920x1080(self):
+        """Preset optimisé pour 1920x1080 (1080p) - Référence"""
+        # Fenêtre
+        self.WINDOW_WIDTH = 1920
+        self.WINDOW_HEIGHT = 1080
+        self.SCREEN_WIDTH = self.WINDOW_WIDTH
+        self.SCREEN_HEIGHT = self.WINDOW_HEIGHT
+        
+        # Entités - Tailles fixes optimisées
+        self.PLAYER_SIZE = 36  # Taille de référence
+        self.ENEMY_SIZE = 32   # Sprites 32x32 comme actuellement
+        
+        # Vitesses
+        self.PLAYER_SPEED = 3.0
+        self.ENEMY_SPEED = 2.0
+        
+        # Projectiles
+        self.ZAP_SIZE = 4
+        self.ZAP_SPEED = 10.0
+        self.LIGHTNING_SIZE = 32
+        
+        # Particules
+        self.PARTICLE_SIZE = 3
+        self.PARTICLE_SPEED = 2.5
+        self.PARTICLE_COUNT = 6
+        
+        # Orbes d'énergie
+        self.ENERGY_ORB_SIZE = 18
+        self.ENERGY_ORB_RADIUS = 90
+        self.ENERGY_ORB_SPEED = 0.06
+        
+        # Interface utilisateur
+        self.HEALTH_BAR_WIDTH = 300
+        self.HEALTH_BAR_HEIGHT = 18
+        self.UI_MARGIN = 15
+        
+        # Police et texte
+        self.font_scale = 1.0
+        
+        # Minimap
+        self.MINIMAP_SIZE_RATIO = 6.0
+        self.MINIMAP_MARGIN = 20
+        self.MINIMAP_PLAYER_SIZE = 6
+        self.MINIMAP_ENEMY_SIZE = 4
+        self.MINIMAP_ALPHA = 160
+        
+        # Appliquer les paramètres communs
+        self.apply_common_parameters()
+    
+    def apply_preset_1280x720(self):
+        """Preset optimisé pour 1280x720 (720p)"""
+        # Fenêtre
+        self.WINDOW_WIDTH = 1280
+        self.WINDOW_HEIGHT = 720
+        self.SCREEN_WIDTH = self.WINDOW_WIDTH
+        self.SCREEN_HEIGHT = self.WINDOW_HEIGHT
+        
+        # Entités - Tailles fixes optimisées
+        self.PLAYER_SIZE = 24  # Plus petit pour 720p
+        self.ENEMY_SIZE = 20   # Sprites 20x20 pour proportions
+        
+        # Vitesses
+        self.PLAYER_SPEED = 2.0
+        self.ENEMY_SPEED = 1.5
+        
+        # Projectiles
+        self.ZAP_SIZE = 3
+        self.ZAP_SPEED = 8.0
+        self.LIGHTNING_SIZE = 20
+        
+        # Particules
+        self.PARTICLE_SIZE = 2
+        self.PARTICLE_SPEED = 2.0
+        self.PARTICLE_COUNT = 4
+        
+        # Orbes d'énergie
+        self.ENERGY_ORB_SIZE = 12
+        self.ENERGY_ORB_RADIUS = 60
+        self.ENERGY_ORB_SPEED = 0.04
+        
+        # Interface utilisateur
+        self.HEALTH_BAR_WIDTH = 200
+        self.HEALTH_BAR_HEIGHT = 12
+        self.UI_MARGIN = 10
+        
+        # Police et texte
+        self.font_scale = 0.7
+        
+        # Minimap
+        self.MINIMAP_SIZE_RATIO = 4.0
+        self.MINIMAP_MARGIN = 15
+        self.MINIMAP_PLAYER_SIZE = 4
+        self.MINIMAP_ENEMY_SIZE = 3
+        self.MINIMAP_ALPHA = 140
+        
+        # Appliquer les paramètres communs après avoir défini le preset
+        self.apply_common_parameters()
+    
+    def apply_common_parameters(self):
+        """Applique les paramètres communs à tous les presets"""
+        # Paramètres des vagues d'ennemis (identiques pour tous)
+        self.INITIAL_ENEMIES_PER_WAVE = 1
+        self.ENEMIES_INCREASE_PER_WAVE = 5
+        self.ENEMY_SPAWN_DELAY_BASE = 20
+        self.ENEMY_SPAWN_DELAY_MIN = 5
+        self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85
+        
+        # Système de caméra (identique pour tous)
+        self.CAMERA_DELAY_DURATION = 12
+        self.CAMERA_FOLLOW_SPEED = 0.08
+        self.CAMERA_MARGIN = 20
+        
+        # Scores et progression (identiques pour tous)
+        self.SCORE_PER_ENEMY_KILL = 10
+        self.SCORE_PER_LIGHTNING_KILL = 15
+        self.SCORE_WAVE_BONUS_MULTIPLIER = 100
+        
+        # Dégâts des armes (fixes, équilibrés)
+        self.ZAP_DAMAGE = 25
+        self.LIGHTNING_DAMAGE = 50
+        self.ENERGY_ORB_DAMAGE = 40
+        
+        # Paramètres des lightning (fixes)
+        self.LIGHTNING_DISPLAY_TIME = 6
+        self.LIGHTNING_COLOR = (255, 255, 255)
+        self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)
+        
+        # Paramètres des beams (fixes)
+        self.BEAM_DURATION = 60
+        self.BEAM_COLOR = (255, 100, 100)
+        self.BEAM_GLOW_COLOR = (255, 200, 150)
+        
+        # Paramètres des particules (fixes mais utilise PARTICLE_SIZE du preset)
+        self.PARTICLE_LIFETIME = 30
+        self.PARTICLE_COLORS = [
+            (255, 255, 0), (255, 165, 0), (255, 0, 0), (255, 255, 255), (255, 192, 203)
+        ]
+        
+        # Couleurs des orbes (fixes)
+        self.ENERGY_ORB_COLOR = (138, 43, 226)
+        self.ENERGY_ORB_GLOW_COLOR = (255, 0, 255)
+        
+        # Types de bonus (identiques pour tous)
+        self.BONUS_TYPES = [
+            "damage_boost", "speed_boost", "shield", "lightning_boost", "orb_boost"
+        ]
+        
+        # Paramètres des bonus temporaires (identiques pour tous)
+        self.BONUS_HEAL_AMOUNT = 30
+        self.BONUS_SHIELD_HITS = 3
+        self.BONUS_DOUBLE_DAMAGE_DURATION = 300
+        self.BONUS_LIGHTNING_STORM_COUNT = 5
+        self.BONUS_SPEED_BOOST_MULTIPLIER = 1.5
+        self.BONUS_SPEED_BOOST_DURATION = 300
+        self.BONUS_INVINCIBILITY_DURATION = 180
+        self.BONUS_TIME_SLOW_DURATION = 300
+        self.BONUS_TIME_SLOW_FACTOR = 0.5
+        self.BONUS_FREEZE_DURATION = 180
+        
+        # Pool d'upgrades (identique pour tous)
+        self.UPGRADE_POOL = [
+            {"id": "speed", "name": "Vitesse +20%", "description": "Augmente la vitesse de déplacement"},
+            {"id": "healing", "name": "Régénération", "description": "Récupère de la vie au fil du temps"},
+            {"id": "shield", "name": "Bouclier temporaire", "description": "Protection contre les dégâts"},
+            {"id": "magnet", "name": "Aimant", "description": "Attire les objets à distance"},
+            {"id": "zap_damage", "name": "Canon +30%", "description": "Le canon fait plus de dégâts"},
+            {"id": "zap_fire_rate", "name": "Cadence canon +40%", "description": "Tire plus rapidement"},
+            {"id": "zap_range", "name": "Portée canon +50%", "description": "Portée du canon augmentée"},
+            {"id": "zap_pierce", "name": "Canon perforant", "description": "Le canon traverse les ennemis"},
+            {"id": "lightning_damage", "name": "Lightning +40%", "description": "Les lightning font plus de dégâts"},
+            {"id": "lightning_fire_rate", "name": "Cadence lightning +50%", "description": "Lightning plus fréquents"},
+            {"id": "lightning_chain", "name": "Chaîne lightning +1", "description": "Les lightning chaînent sur plus d'ennemis"},
+            {"id": "lightning_storm", "name": "Tempête de lightning", "description": "Lightning multiples simultanés"},
+            {"id": "orb_count", "name": "Orb supplémentaire", "description": "Ajoute une orb défensive"},
+            {"id": "orb_damage", "name": "Orb +50%", "description": "Les orb font plus de dégâts"},
+            {"id": "orb_speed", "name": "Orb rapides", "description": "Les orb tournent plus vite"},
+            {"id": "orb_size", "name": "Orb géantes", "description": "Orb plus grandes et plus de dégâts"}
+        ]
+    
+    def recalculate_adaptive_sizes(self):
+        """Cette méthode n'est plus utilisée - les tailles sont maintenant fixes par preset"""
+        # Les presets fixes remplacent le système adaptatif
+        # Cette méthode est conservée pour compatibilité mais ne fait plus rien
+        pass
         
         # Types de bonus donnés par les ennemis spéciaux
         self.BONUS_TYPES = [
@@ -82,6 +343,11 @@ class Config:
         self.LIGHTNING_SECONDARY_COLOR = (173, 216, 230)  # Bleu clair
         self.LIGHTNING_CHAIN_RANGE = self.WINDOW_WIDTH * 0.2  # 20% de la largeur pour le chaînage
         self.LIGHTNING_DAMAGE = 50  # Compatibilité avec l'ancien code
+        
+        # Paramètres des beams (nouveau)
+        self.BEAM_DURATION = 60  # 1 seconde à 60fps
+        self.BEAM_COLOR = (255, 100, 100)  # Rouge/orange
+        self.BEAM_GLOW_COLOR = (255, 200, 150)  # Lueur dorée
         
         # Paramètres des particules d'explosion
         self.PARTICLE_COUNT = 8  # Nombre de particules par explosion

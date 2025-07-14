@@ -9,7 +9,7 @@ Utilise weapon_config.py pour tous les paramètres et progressions.
 import math
 import pygame
 from abc import ABC, abstractmethod
-from entities import Zap, Lightning, EnergyOrb
+from entities import Zap, Lightning, EnergyOrb, Beam
 from weapon_config import WeaponConfig, SkillConfig, get_weapon_stat, get_skill_stat
 
 
@@ -102,14 +102,13 @@ class CannonWeapon(Weapon):
         projectiles.append(zap)
         
         self.fire_timer = 0
+        return None  # Pas d'effets spéciaux pour le canon
     
     def update(self, config):
         self.fire_timer += 1
     
     def get_fire_rate(self, config):
-        base_rate = self.config["base_fire_rate"]
-        fire_rate_multiplier = get_weapon_stat("Canon", "fire_rate", self.level)
-        return int(base_rate * fire_rate_multiplier)
+        return int(get_weapon_stat("Canon", "fire_rate", self.level))
     
     def get_damage(self):
         return get_weapon_stat("Canon", "damage", self.level)
@@ -176,17 +175,19 @@ class LightningWeapon(Weapon):
         
         # Appliquer les dégâts
         damage = get_weapon_stat("Lightning", "damage", self.level)
+        hit_enemies = []
         for enemy in targets:
             enemy.take_damage(damage)
+            hit_enemies.append((enemy.x + enemy.size // 2, enemy.y + enemy.size // 2))
         
         self.fire_timer = 0
+        return hit_enemies  # Retourner les positions des ennemis touchés pour les effets
     
     def update(self, config):
         self.fire_timer += 1
     
     def get_fire_rate(self, config):
-        base_rate = self.config["base_fire_rate"]
-        return int(base_rate * get_weapon_stat("Lightning", "fire_rate", self.level))
+        return int(get_weapon_stat("Lightning", "fire_rate", self.level))
     
     def get_damage(self):
         return get_weapon_stat("Lightning", "damage", self.level)
@@ -241,6 +242,69 @@ class OrbWeapon(Weapon):
     
     def get_orb_count(self):
         return get_weapon_stat("Orb", "orb_count", self.level)
+
+
+class BeamWeapon(Weapon):
+    """Arme Beam - rayon laser continu qui traverse les ennemis"""
+    
+    def __init__(self):
+        config = WeaponConfig.BEAM
+        super().__init__(config["name"], max_level=config["max_level"])
+        self.config = config
+    
+    def fire(self, player, enemies, projectiles, config):
+        if not enemies or not self.can_fire(config):
+            return None
+        
+        # Trouver l'ennemi le plus proche dans la portée
+        player_center_x = player.x + player.size // 2
+        player_center_y = player.y + player.size // 2
+        
+        weapon_range = get_weapon_stat("Beam", "range", self.level)
+        enemies_in_range = [e for e in enemies 
+                           if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= weapon_range]
+        
+        if not enemies_in_range:
+            return None
+        
+        closest_enemy = min(enemies_in_range, key=lambda e: 
+            math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
+        
+        # Calculer la direction vers l'ennemi le plus proche
+        enemy_center_x = closest_enemy.x + closest_enemy.size // 2
+        enemy_center_y = closest_enemy.y + closest_enemy.size // 2
+        
+        dx = enemy_center_x - player_center_x
+        dy = enemy_center_y - player_center_y
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance > 0:
+            direction_x = dx / distance
+            direction_y = dy / distance
+        else:
+            direction_x, direction_y = 1, 0
+        
+        # Créer le faisceau laser
+        beam = Beam(player_center_x, player_center_y, direction_x, direction_y, config, self.level)
+        projectiles.append(beam)
+        
+        self.fire_timer = 0
+        return None
+    
+    def update(self, config):
+        self.fire_timer += 1
+    
+    def get_fire_rate(self, config):
+        return int(get_weapon_stat("Beam", "fire_rate", self.level))
+    
+    def get_damage(self):
+        return get_weapon_stat("Beam", "damage", self.level)
+    
+    def get_range(self):
+        return get_weapon_stat("Beam", "range", self.level)
+    
+    def get_width(self):
+        return get_weapon_stat("Beam", "width", self.level)
 
 
 class Skill(ABC):

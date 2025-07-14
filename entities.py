@@ -179,12 +179,50 @@ class Player:
 class Enemy:
     """Classe des ennemis avec IA de poursuite"""
     
+    # Variables de classe pour les sprites (chargés une seule fois)
+    sprites = None
+    sprites_loaded = False
+    
+    @classmethod
+    def load_sprites(cls):
+        """Charge tous les sprites d'ennemis une seule fois"""
+        if not cls.sprites_loaded:
+            cls.sprites = {}
+            try:
+                # Charger les sprites 1.png à 5.png
+                for i in range(1, 6):
+                    sprite_path = f"Enemy/{i}.png"
+                    sprite = pygame.image.load(sprite_path).convert_alpha()
+                    # Les sprites sont maintenant redimensionnés selon le preset actuel
+                    # La taille sera définie lors de l'initialisation de l'ennemi
+                    cls.sprites[i] = sprite  # Garder le sprite original pour le redimensionner plus tard
+                cls.sprites_loaded = True
+                print(f"✅ {len(cls.sprites)} sprites d'ennemis chargés (redimensionnement selon preset)")
+            except Exception as e:
+                print(f"❌ Erreur lors du chargement des sprites: {e}")
+                cls.sprites = {}
+                cls.sprites_loaded = True
+    
     def __init__(self, x, y, config, is_special=False):
+        # Charger les sprites si ce n'est pas déjà fait
+        if not Enemy.sprites_loaded:
+            Enemy.load_sprites()
+        
         self.x = x
         self.y = y
         self.config = config
         self.size = config.ENEMY_SIZE
         self.speed = config.ENEMY_SPEED
+        
+        # Choisir un sprite aléatoire pour cet ennemi et le redimensionner à la bonne taille
+        if Enemy.sprites:
+            self.sprite_id = random.choice(list(Enemy.sprites.keys()))
+            # Redimensionner le sprite original à la taille définie dans le preset
+            original_sprite = Enemy.sprites[self.sprite_id]
+            self.sprite = pygame.transform.scale(original_sprite, (self.size, self.size))
+        else:
+            self.sprite_id = None
+            self.sprite = None
         
         # Ennemi spécial
         self.is_special = is_special
@@ -233,28 +271,49 @@ class Enemy:
         """Fait subir des dégâts à l'ennemi"""
         self.health = max(0, self.health - damage)
     
-    def draw(self, screen):
+    def draw(self, screen, camera_x=0, camera_y=0):
         """Dessine l'ennemi"""
-        # Couleur selon le type d'ennemi
-        enemy_color = self.config.SPECIAL_ENEMY_COLOR if self.is_special else self.config.ENEMY_COLOR
+        if self.sprite:
+            # Utiliser le sprite
+            sprite_rect = pygame.Rect(int(self.x), int(self.y), self.size, self.size)
+            
+            # Pour les ennemis spéciaux, ajouter un effet de couleur
+            if self.is_special:
+                # Créer une copie du sprite avec une teinte spéciale
+                special_sprite = self.sprite.copy()
+                # Appliquer un effet doré/jaune pour les ennemis spéciaux
+                special_sprite.fill((255, 215, 0, 100), special_flags=pygame.BLEND_ADD)
+                screen.blit(special_sprite, sprite_rect)
+                
+                # Effet scintillant pour les ennemis spéciaux
+                pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
+                glow_color = (255, 255, 255, pulse)
+                glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
+                pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
+            else:
+                # Ennemi normal
+                screen.blit(self.sprite, sprite_rect)
+        else:
+            # Fallback : dessiner des carrés colorés si les sprites ne sont pas chargés
+            enemy_color = self.config.SPECIAL_ENEMY_COLOR if self.is_special else self.config.ENEMY_COLOR
+            
+            # Corps principal
+            pygame.draw.rect(screen, enemy_color,
+                            (int(self.x), int(self.y), self.size, self.size))
+            
+            # Contour blanc (plus épais pour les ennemis spéciaux)
+            border_width = 3 if self.is_special else 2
+            pygame.draw.rect(screen, self.config.WHITE,
+                            (int(self.x), int(self.y), self.size, self.size), border_width)
+            
+            # Effet scintillant pour les ennemis spéciaux
+            if self.is_special:
+                pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
+                glow_color = (255, 255, 255, pulse)
+                glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
+                pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
         
-        # Corps principal
-        pygame.draw.rect(screen, enemy_color,
-                        (int(self.x), int(self.y), self.size, self.size))
-        
-        # Contour blanc (plus épais pour les ennemis spéciaux)
-        border_width = 3 if self.is_special else 2
-        pygame.draw.rect(screen, self.config.WHITE,
-                        (int(self.x), int(self.y), self.size, self.size), border_width)
-        
-        # Effet scintillant pour les ennemis spéciaux
-        if self.is_special:
-            pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
-            glow_color = (255, 255, 255, pulse)
-            glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
-            pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
-        
-        # Barre de santé si endommagé
+        # Barre de santé si endommagé (au-dessus du sprite)
         if self.health < self.max_health:
             health_ratio = self.health / self.max_health
             bar_width = self.size
@@ -268,6 +327,12 @@ class Enemy:
             current_width = int(bar_width * health_ratio)
             pygame.draw.rect(screen, self.config.GREEN,
                            (int(self.x), int(self.y - 8), current_width, bar_height))
+        
+        # Afficher la hitbox circulaire en rouge (bien centrée)
+        center_x = int(self.x + self.size // 2)
+        center_y = int(self.y + self.size // 2)
+        hitbox_radius = self.size // 2  # Rayon = largeur du sprite / 2 (pour 32x32, rayon = 16)
+        pygame.draw.circle(screen, (255, 0, 0), (center_x, center_y), hitbox_radius, 2)
 
 
 class Zap:
@@ -640,3 +705,125 @@ class BonusManager:
     def is_active(self, bonus_type):
         """Vérifie si un bonus est actif"""
         return bonus_type in self.active_bonuses
+
+
+class Beam:
+    """Classe pour les rayons laser continus"""
+    
+    def __init__(self, start_x, start_y, direction_x, direction_y, config, level):
+        from weapon_config import get_weapon_stat
+        
+        self.start_x = start_x
+        self.start_y = start_y
+        self.direction_x = direction_x
+        self.direction_y = direction_y
+        self.config = config
+        self.level = level
+        
+        # Propriétés du faisceau
+        self.range = get_weapon_stat("Beam", "range", level)
+        self.width = get_weapon_stat("Beam", "width", level)
+        self.damage = get_weapon_stat("Beam", "damage", level)
+        
+        # Calculer le point final du rayon
+        self.end_x = self.start_x + self.direction_x * self.range
+        self.end_y = self.start_y + self.direction_y * self.range
+        
+        # Durée de vie du faisceau
+        self.duration = config.BEAM_DURATION if hasattr(config, 'BEAM_DURATION') else 60
+        self.current_life = self.duration
+        
+        # Liste des ennemis déjà touchés pour éviter les dégâts multiples
+        self.hit_enemies = set()
+    
+    def update(self):
+        """Met à jour le faisceau"""
+        self.current_life -= 1
+        return self.current_life > 0
+    
+    def check_collision_with_enemies(self, enemies):
+        """Vérifie les collisions avec les ennemis et applique les dégâts"""
+        hit_positions = []
+        
+        for enemy in enemies:
+            if id(enemy) in self.hit_enemies:
+                continue  # Éviter de toucher plusieurs fois le même ennemi
+            
+            # Vérifier si l'ennemi intersecte avec le rayon laser
+            if self.line_intersects_rect(enemy):
+                enemy.take_damage(self.damage)
+                self.hit_enemies.add(id(enemy))
+                hit_positions.append((enemy.x + enemy.size // 2, enemy.y + enemy.size // 2))
+        
+        return hit_positions
+    
+    def line_intersects_rect(self, enemy):
+        """Vérifie si le rayon laser intersecte avec un cercle (ennemi)"""
+        # Centre du cercle de l'ennemi
+        enemy_center_x = enemy.x + enemy.size // 2
+        enemy_center_y = enemy.y + enemy.size // 2
+        enemy_radius = enemy.size // 2  # Rayon = largeur du sprite / 2
+        
+        # Distance du centre de l'ennemi à la ligne du laser
+        distance_to_line = self.point_to_line_distance(enemy_center_x, enemy_center_y)
+        
+        # Vérifier si le cercle intersecte avec la ligne
+        if distance_to_line <= enemy_radius + self.width / 2:
+            # Vérifier que le point est dans la portée du rayon
+            proj = self.project_point_on_line(enemy_center_x, enemy_center_y)
+            if 0 <= proj <= 1:  # Le point projeté est sur le segment
+                return True
+        
+        return False
+    
+    def point_to_line_distance(self, px, py):
+        """Calcule la distance d'un point à la ligne du rayon"""
+        # Vecteur de la ligne
+        line_length = math.sqrt(self.direction_x**2 + self.direction_y**2)
+        if line_length == 0:
+            return math.sqrt((px - self.start_x)**2 + (py - self.start_y)**2)
+        
+        # Distance perpendiculaire à la ligne
+        t = ((px - self.start_x) * self.direction_x + (py - self.start_y) * self.direction_y) / (line_length**2)
+        
+        # Point le plus proche sur la ligne
+        closest_x = self.start_x + t * self.direction_x * line_length
+        closest_y = self.start_y + t * self.direction_y * line_length
+        
+        return math.sqrt((px - closest_x)**2 + (py - closest_y)**2)
+    
+    def project_point_on_line(self, px, py):
+        """Projette un point sur la ligne et retourne la position normalisée (0-1)"""
+        line_length_sq = self.range**2
+        if line_length_sq == 0:
+            return 0
+        
+        t = ((px - self.start_x) * self.direction_x + (py - self.start_y) * self.direction_y) * self.range / line_length_sq
+        return max(0, min(1, t))
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine le rayon laser avec effet de lueur"""
+        if self.current_life <= 0:
+            return
+        
+        # Intensité basée sur la durée de vie restante
+        intensity = self.current_life / self.duration
+        
+        # Couleurs du laser (rouge/orange)
+        core_color = tuple(int(c * intensity) for c in (255, 100, 100))  # Rouge/orange
+        glow_color = tuple(int(c * intensity * 0.6) for c in (255, 200, 150))  # Lueur plus douce
+        
+        # Points ajustés pour la caméra
+        start_point = (int(self.start_x - camera_x), int(self.start_y - camera_y))
+        end_point = (int(self.end_x - camera_x), int(self.end_y - camera_y))
+        
+        # Dessiner la lueur (plus large)
+        if self.width > 2:
+            pygame.draw.line(screen, glow_color, start_point, end_point, int(self.width))
+        
+        # Dessiner le cœur du laser (plus fin)
+        core_width = max(2, int(self.width * 0.4))
+        pygame.draw.line(screen, core_color, start_point, end_point, core_width)
+        
+        # Point lumineux au départ
+        pygame.draw.circle(screen, core_color, start_point, max(2, int(self.width * 0.3)))
