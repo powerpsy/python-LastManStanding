@@ -37,7 +37,16 @@ class Config:
         self.ENEMY_HEALTH = 20
         self.ENEMY_DAMAGE = 10
         self.SPECIAL_ENEMY_SPAWN_CHANCE = 0.1
-        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 2.5
+        self.SPECIAL_ENEMY_HEALTH_MULTIPLIER = 5.0  # Augmenté de 2.5 à 5.0 (x2)
+        
+        # Facteur de correction de vitesse pour équilibrer joueur vs ennemis
+        # Le joueur utilise un système d'accélération, les ennemis un mouvement direct
+        # Ce facteur compense la différence pour avoir des vitesses comparables
+        self.ENEMY_SPEED_CORRECTION_FACTOR = 6.5  # Facteur empirique pour équilibrer
+        
+        # Progression des points de vie par vague
+        self.ENEMY_HEALTH_INCREASE_PER_WAVE = 1  # +1 HP par vague pour ennemis normaux
+        self.SPECIAL_ENEMY_HEALTH_INCREASE_PER_WAVE = 2  # +2 HP par vague pour ennemis spéciaux
     
     def detect_and_set_resolution(self, forced_screen_size=None):
         """Détecte la résolution d'écran et applique le preset approprié"""
@@ -45,15 +54,15 @@ class Config:
             # Mode forcé pour les tests
             if forced_screen_size == 1:
                 self.apply_preset_1280x720()
-                print(f"🧪 Mode test: Preset 1280x720 forcé")
+                print(f"Mode test: Preset 1280x720 forcé")
             elif forced_screen_size == 2:
                 self.apply_preset_1920x1080()
-                print(f"🧪 Mode test: Preset 1920x1080 forcé")
+                print(f"Mode test: Preset 1920x1080 forcé")
             elif forced_screen_size == 3:
                 self.apply_preset_2560x1440()
-                print(f"🧪 Mode test: Preset 2560x1440 forcé")
+                print(f"Mode test: Preset 2560x1440 forcé")
             else:
-                print(f"⚠️ Taille d'écran forcée invalide: {forced_screen_size}. Utilisation de la détection automatique.")
+                print(f"Taille d'écran forcée invalide: {forced_screen_size}. Utilisation de la détection automatique.")
                 forced_screen_size = None
         
         if forced_screen_size is None:
@@ -71,9 +80,9 @@ class Config:
             else:
                 self.apply_preset_1280x720()
             
-            print(f"🖥️ Résolution détectée: {screen_width}x{screen_height}")
+            print(f"Résolution détectée: {screen_width}x{screen_height}")
         
-        print(f"📐 Preset appliqué: {self.WINDOW_WIDTH}x{self.WINDOW_HEIGHT}")
+        print(f"Preset appliqué: {self.WINDOW_WIDTH}x{self.WINDOW_HEIGHT}")
     
     def apply_preset_2560x1440(self):
         """Preset optimisé pour 2560x1440 (1440p)"""
@@ -83,13 +92,13 @@ class Config:
         self.SCREEN_WIDTH = self.WINDOW_WIDTH
         self.SCREEN_HEIGHT = self.WINDOW_HEIGHT
         
-        # Entités - Tailles fixes optimisées
+        # Entités - Tailles fixes optimisées (x2 pour ennemis)
         self.PLAYER_SIZE = 48  # Plus grand pour 1440p
-        self.ENEMY_SIZE = 40   # Sprites 40x40 pour meilleure visibilité
+        self.ENEMY_SIZE = 80   # Scale x2 : 40 -> 80 pixels pour meilleure visibilité
         
-        # Vitesses
-        self.PLAYER_SPEED = 4.0
-        self.ENEMY_SPEED = 2.5
+        # Vitesses (maintenant équilibrées grâce au facteur de correction)
+        self.PLAYER_SPEED = 1.0
+        self.ENEMY_SPEED = 0.75
         
         # Projectiles
         self.ZAP_SIZE = 6
@@ -186,8 +195,8 @@ class Config:
         self.ENEMY_SIZE = 20   # Sprites 20x20 pour proportions
         
         # Vitesses
-        self.PLAYER_SPEED = 2.0
-        self.ENEMY_SPEED = 1.5
+        self.PLAYER_SPEED = 0.7
+        self.ENEMY_SPEED = 0.5
         
         # Projectiles
         self.ZAP_SIZE = 3
@@ -227,7 +236,7 @@ class Config:
         # Paramètres des vagues d'ennemis (identiques pour tous)
         self.INITIAL_ENEMIES_PER_WAVE = 1
         self.ENEMIES_INCREASE_PER_WAVE = 5
-        self.ENEMY_SPAWN_DELAY_BASE = 20
+        self.ENEMY_SPAWN_DELAY_BASE = 19
         self.ENEMY_SPAWN_DELAY_MIN = 5
         self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85
         
@@ -464,4 +473,4 @@ class Config:
         self.MINIMAP_SIZE_RATIO = 6.0
         self.MINIMAP_MARGIN = int(self.WINDOW_WIDTH * 0.01)
         
-        print(f"📐 Tailles recalculées - Joueur: {self.PLAYER_SIZE}, Ennemis: {self.ENEMY_SIZE}, Orbes: {self.ENERGY_ORB_SIZE}")
+        print(f"Tailles recalculées - Joueur: {self.PLAYER_SIZE}, Ennemis: {self.ENEMY_SIZE}, Orbes: {self.ENERGY_ORB_SIZE}")

@@ -64,7 +64,7 @@ class Background:
         else:
             seed = random.randint(0, 1000000)
         random.seed(seed)
-        print(f"🌍 Génération du terrain avec le seed: {seed}")
+        print(f"Génération du terrain avec le seed: {seed}")
         
         # Initialiser les cartes
         self.base_map = [[0 for _ in range(self.map_width)] for _ in range(self.map_height)]
@@ -76,7 +76,7 @@ class Background:
         # 2. Ajouter les décorations
         self.generate_decorations()
         
-        print(f"✅ Terrain généré: {self.map_width}x{self.map_height} tiles")
+        print(f"Terrain généré: {self.map_width}x{self.map_height} tiles")
     
     def generate_base_terrain(self):
         """Génère le terrain de base avec des zones cohérentes"""

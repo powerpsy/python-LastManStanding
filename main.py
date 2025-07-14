@@ -18,7 +18,7 @@ def main():
     # 2 = 1920x1080 (1080p) 
     # 3 = 2560x1440 (1440p)
     # None = Détection automatique selon l'écran
-    screen_size = None  # Changer cette valeur pour forcer une résolution
+    screen_size = 3  # Test en 1440p pour ajustements
     
     try:
         # Initialise Pygame
@@ -30,10 +30,10 @@ def main():
         game.run()
         
     except KeyboardInterrupt:
-        print("\n🛑 Jeu interrompu par l'utilisateur.")
+        print("\nJeu interrompu par l'utilisateur.")
         
     except Exception as e:
-        print(f"❌ Une erreur s'est produite: {e}")
+        print(f"Une erreur s'est produite: {e}")
         
     finally:
         pygame.quit()

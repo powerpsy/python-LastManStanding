@@ -60,9 +60,9 @@ class Player:
                 self.animation_frames_left.append(frame_left)
             
             self.has_image = True
-            print(f"✅ Animation spritesheet du joueur activée (3 frames, séquence 1-2-3-2)")
+            print(f"Animation spritesheet du joueur activée (3 frames, séquence 1-2-3-2)")
         except (pygame.error, FileNotFoundError):
-            print("⚠️ Spritesheet Birds.png non trouvée, utilisation du rendu par défaut")
+            print("Spritesheet Birds.png non trouvée, utilisation du rendu par défaut")
             self.animation_frames = []
             self.animation_frames_left = []
             self.has_image = False
@@ -190,20 +190,20 @@ class Enemy:
             cls.sprites = {}
             try:
                 # Charger les sprites 1.png à 5.png
-                for i in range(1, 6):
+                for i in range(1, 21):
                     sprite_path = f"Enemy/{i}.png"
                     sprite = pygame.image.load(sprite_path).convert_alpha()
                     # Les sprites sont maintenant redimensionnés selon le preset actuel
                     # La taille sera définie lors de l'initialisation de l'ennemi
                     cls.sprites[i] = sprite  # Garder le sprite original pour le redimensionner plus tard
                 cls.sprites_loaded = True
-                print(f"✅ {len(cls.sprites)} sprites d'ennemis chargés (redimensionnement selon preset)")
+                print(f"{len(cls.sprites)} sprites d'ennemis chargés (redimensionnement selon preset)")
             except Exception as e:
-                print(f"❌ Erreur lors du chargement des sprites: {e}")
+                print(f"Erreur lors du chargement des sprites: {e}")
                 cls.sprites = {}
                 cls.sprites_loaded = True
     
-    def __init__(self, x, y, config, is_special=False):
+    def __init__(self, x, y, config, is_special=False, wave_number=1):
         # Charger les sprites si ce n'est pas déjà fait
         if not Enemy.sprites_loaded:
             Enemy.load_sprites()
@@ -224,16 +224,33 @@ class Enemy:
             self.sprite_id = None
             self.sprite = None
         
+        # Calcul des points de vie selon la vague et le type d'ennemi
+        base_health = config.ENEMY_HEALTH
+        wave_bonus = (wave_number - 1)  # Vague 1 = +0, Vague 2 = +1, etc.
+        
         # Ennemi spécial
         self.is_special = is_special
         if is_special:
-            self.max_health = int(config.ENEMY_HEALTH * config.SPECIAL_ENEMY_HEALTH_MULTIPLIER)
+            # Points de vie spéciaux avec progression par vague
+            special_wave_bonus = wave_bonus * config.SPECIAL_ENEMY_HEALTH_INCREASE_PER_WAVE
+            self.max_health = int((base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE) * config.SPECIAL_ENEMY_HEALTH_MULTIPLIER + special_wave_bonus)
             self.bonus_type = random.choice(config.BONUS_TYPES)
+            # Taille x2 pour les ennemis spéciaux
+            self.size = config.ENEMY_SIZE * 2
+            # Redimensionner le sprite à la nouvelle taille
+            if self.sprite:
+                self.sprite = pygame.transform.scale(Enemy.sprites[self.sprite_id], (self.size, self.size))
         else:
-            self.max_health = config.ENEMY_HEALTH
+            # Points de vie normaux avec progression par vague
+            self.max_health = base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE
             self.bonus_type = None
             
         self.health = self.max_health
+        
+        # Animation de rotation (ping-pong de -5° à +5° accéléré)
+        self.rotation_angle = 0
+        self.rotation_time = 0
+        self.rotation_speed = 5  # Vitesse de rotation accélérée (20 au lieu de 10)
         
         # Composante aléatoire pour l'IA
         self.random_offset_x = 0
@@ -242,6 +259,14 @@ class Enemy:
     
     def update(self, player_x, player_y):
         """Met à jour la position de l'ennemi (suit le joueur)"""
+        # Mise à jour de l'animation de rotation accélérée avec rotation_speed
+        dt = 1.0 / 60.0  # Delta time assumant 60 FPS
+        self.rotation_time += dt * self.rotation_speed  # Utiliser rotation_speed pour accélérer
+        
+        # Calculer l'angle de rotation en ping-pong (-5° à +5°)
+        # La vitesse est maintenant contrôlée par rotation_speed
+        self.rotation_angle = 5 * math.sin(self.rotation_time * math.pi)
+        
         # Mise à jour du mouvement aléatoire
         self.random_timer += 1
         if self.random_timer >= 30:  # Change de direction toutes les 0.5 secondes
@@ -263,41 +288,35 @@ class Enemy:
             if norm > 0:
                 dx = dx / norm
                 dy = dy / norm
+            # Appliquer le facteur de correction pour équilibrer avec le système d'accélération du joueur
+            corrected_speed = self.speed * self.config.ENEMY_SPEED_CORRECTION_FACTOR
             # Déplacer l'ennemi
-            self.x += dx * self.speed
-            self.y += dy * self.speed
+            self.x += dx * corrected_speed
+            self.y += dy * corrected_speed
     
     def take_damage(self, damage):
         """Fait subir des dégâts à l'ennemi"""
         self.health = max(0, self.health - damage)
     
     def draw(self, screen, camera_x=0, camera_y=0):
-        """Dessine l'ennemi"""
+        """Dessine l'ennemi avec animation de rotation"""
         if self.sprite:
-            # Utiliser le sprite
-            sprite_rect = pygame.Rect(int(self.x), int(self.y), self.size, self.size)
+            # Appliquer la rotation au sprite
+            rotated_sprite = pygame.transform.rotate(self.sprite, self.rotation_angle)
             
-            # Pour les ennemis spéciaux, ajouter un effet de couleur
-            if self.is_special:
-                # Créer une copie du sprite avec une teinte spéciale
-                special_sprite = self.sprite.copy()
-                # Appliquer un effet doré/jaune pour les ennemis spéciaux
-                special_sprite.fill((255, 215, 0, 100), special_flags=pygame.BLEND_ADD)
-                screen.blit(special_sprite, sprite_rect)
-                
-                # Effet scintillant pour les ennemis spéciaux
-                pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
-                glow_color = (255, 255, 255, pulse)
-                glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
-                pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
-            else:
-                # Ennemi normal
-                screen.blit(self.sprite, sprite_rect)
+            # Calculer la nouvelle position pour centrer le sprite tourné
+            rotated_rect = rotated_sprite.get_rect()
+            sprite_center_x = self.x + self.size // 2
+            sprite_center_y = self.y + self.size // 2
+            rotated_rect.center = (sprite_center_x, sprite_center_y)
+            
+            # Dessiner le sprite tourné
+            screen.blit(rotated_sprite, rotated_rect)
         else:
             # Fallback : dessiner des carrés colorés si les sprites ne sont pas chargés
-            enemy_color = self.config.SPECIAL_ENEMY_COLOR if self.is_special else self.config.ENEMY_COLOR
+            enemy_color = self.config.ENEMY_COLOR  # Couleur normale pour tous les ennemis
             
-            # Corps principal
+            # Corps principal (pas de rotation pour le fallback pour garder les performances)
             pygame.draw.rect(screen, enemy_color,
                             (int(self.x), int(self.y), self.size, self.size))
             
@@ -327,12 +346,6 @@ class Enemy:
             current_width = int(bar_width * health_ratio)
             pygame.draw.rect(screen, self.config.GREEN,
                            (int(self.x), int(self.y - 8), current_width, bar_height))
-        
-        # Afficher la hitbox circulaire en rouge (bien centrée)
-        center_x = int(self.x + self.size // 2)
-        center_y = int(self.y + self.size // 2)
-        hitbox_radius = self.size // 2  # Rayon = largeur du sprite / 2 (pour 32x32, rayon = 16)
-        pygame.draw.circle(screen, (255, 0, 0), (center_x, center_y), hitbox_radius, 2)
 
 
 class Zap:
@@ -603,17 +616,17 @@ class BonusManager:
                 game_instance.player.health + self.config.BONUS_HEAL_AMOUNT
             )
             healed = game_instance.player.health - old_health
-            print(f"❤️ Soigné de {healed} points de vie")
+            print(f"Soigné de {healed} points de vie")
             
         elif bonus_type == "shield":
             # Aura de protection
             self.shield_hits_remaining = self.config.BONUS_SHIELD_HITS
-            print(f"🛡️ Bouclier activé ({self.shield_hits_remaining} coups)")
+            print(f"Bouclier activé ({self.shield_hits_remaining} coups)")
             
         elif bonus_type == "double_damage":
             # Double dégâts
             self.active_bonuses["double_damage"] = self.config.BONUS_DOUBLE_DAMAGE_DURATION
-            print("⚔️ Double dégâts activé")
+            print("Double dégâts activé")
             
         elif bonus_type == "lightning_storm":
             # Tempête d'éclairs
@@ -629,7 +642,7 @@ class BonusManager:
                         self.config
                     )
                     game_instance.lightnings.append(lightning)
-            print(f"⚡ Tempête d'éclairs ! {self.config.BONUS_LIGHTNING_STORM_COUNT} éclairs")
+            print(f"Tempête d'éclairs ! {self.config.BONUS_LIGHTNING_STORM_COUNT} éclairs")
             
         elif bonus_type == "speed_boost":
             # Boost de vitesse
@@ -637,22 +650,22 @@ class BonusManager:
                 self.original_speed = game_instance.player.speed
             game_instance.player.speed = self.original_speed * self.config.BONUS_SPEED_BOOST_MULTIPLIER
             self.active_bonuses["speed_boost"] = self.config.BONUS_SPEED_BOOST_DURATION
-            print("🚀 Boost de vitesse activé")
+            print("Boost de vitesse activé")
             
         elif bonus_type == "invincibility":
             # Invincibilité temporaire
             self.active_bonuses["invincibility"] = self.config.BONUS_INVINCIBILITY_DURATION
-            print("✨ Invincibilité activée")
+            print("Invincibilité activée")
             
         elif bonus_type == "time_slow":
             # Ralentissement du temps
             self.active_bonuses["time_slow"] = self.config.BONUS_TIME_SLOW_DURATION
-            print("⏰ Temps ralenti")
+            print("Temps ralenti")
             
         elif bonus_type == "freeze":
             # Gel des ennemis
             self.active_bonuses["freeze"] = self.config.BONUS_FREEZE_DURATION
-            print("❄️ Ennemis gelés")
+            print("Ennemis gelés")
     
     def update(self, game_instance):
         """Met à jour les bonus actifs"""
@@ -668,20 +681,20 @@ class BonusManager:
         if bonus_type == "speed_boost" and self.original_speed is not None:
             game_instance.player.speed = self.original_speed
             self.original_speed = None
-            print("🚀 Boost de vitesse terminé")
+            print("Boost de vitesse terminé")
         elif bonus_type == "invincibility":
-            print("✨ Invincibilité terminée")
+            print("Invincibilité terminée")
         elif bonus_type == "time_slow":
-            print("⏰ Temps normal")
+            print("Temps normal")
         elif bonus_type == "freeze":
-            print("❄️ Dégel des ennemis")
+            print("Dégel des ennemis")
     
     def can_take_damage(self):
         """Vérifie si le joueur peut subir des dégâts"""
         # Bouclier
         if self.shield_hits_remaining > 0:
             self.shield_hits_remaining -= 1
-            print(f"🛡️ Bouclier ! ({self.shield_hits_remaining} coups restants)")
+            print(f"Bouclier ! ({self.shield_hits_remaining} coups restants)")
             return False
         
         # Invincibilité

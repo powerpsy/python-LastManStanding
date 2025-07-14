@@ -100,13 +100,13 @@ class Game:
             if self.show_upgrade_screen:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mx, my = pygame.mouse.get_pos()
-                    # Boutons
-                    btn_w, btn_h = 120, 48
+                    # Boutons (agrandis)
+                    btn_w, btn_h = 180, 72  # Agrandis pour correspondre à draw_upgrade_screen
                     screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
                     btn_y = screen_h//2 + 120
-                    roll_rect = pygame.Rect(screen_w//2-200, btn_y, btn_w, btn_h)
-                    ban_rect = pygame.Rect(screen_w//2-60, btn_y, btn_w, btn_h)
-                    skip_rect = pygame.Rect(screen_w//2+80, btn_y, btn_w, btn_h)
+                    roll_rect = pygame.Rect(screen_w//2-300, btn_y, btn_w, btn_h)  # Position ajustée
+                    ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)   # Position ajustée
+                    skip_rect = pygame.Rect(screen_w//2+120, btn_y, btn_w, btn_h)  # Position ajustée
                     
                     # Sélection d'une option d'upgrade (clic sur les options)
                     if not self.ban_mode:
@@ -225,7 +225,7 @@ class Game:
                 int(self.base_spawn_delay * reduction_factor)
             )
             
-            print(f"🌊 Vague {self.wave_number} - {self.enemies_per_wave} ennemis")
+            print(f"Vague {self.wave_number} - {self.enemies_per_wave} ennemis")
             
             # Affichage des armes et compétences du nouveau système
             weapons = self.weapon_manager.get_weapon_list()
@@ -234,8 +234,8 @@ class Game:
             weapon_names = [f"{w['name']} Niv.{w['level']}" for w in weapons]
             skill_names = [f"{s['name']} Niv.{s['level']}" for s in skills]
             
-            print(f"⚔️ Armes ({len(weapons)}/7): {', '.join(weapon_names) if weapons else 'Aucune'}")
-            print(f"🎯 Compétences ({len(skills)}/14): {', '.join(skill_names) if skills else 'Aucune'}")
+            print(f"Armes ({len(weapons)}/7): {', '.join(weapon_names) if weapons else 'Aucune'}")
+            print(f"Compétences ({len(skills)}/14): {', '.join(skill_names) if skills else 'Aucune'}")
         
         # Spawn d'un nouvel ennemi si nécessaire
         if self.enemies_spawned < self.enemies_per_wave:
@@ -335,9 +335,9 @@ class Game:
         x = int(max(0, min(x, world_bounds['max_x'] - 32)))  # 32 = taille de l'ennemi
         y = int(max(0, min(y, world_bounds['max_y'] - 32)))
         
-        # Créer l'ennemi (avec chance d'être spécial)
+        # Créer l'ennemi (avec chance d'être spécial et progression par vague)
         is_special = random.random() < self.config.SPECIAL_ENEMY_SPAWN_CHANCE
-        enemy = Enemy(x, y, self.config, is_special)
+        enemy = Enemy(x, y, self.config, is_special, self.wave_number)
         self.enemies.append(enemy)
     
     def update_camera(self, player_was_moving, player_is_moving):
@@ -407,7 +407,7 @@ class Game:
             self.energy_orbs.clear()
             self.recreate_all_energy_orbs()
         
-        print(f"🖼️ Fenêtre redimensionnée: {new_width}x{new_height}")
+        print(f"Fenêtre redimensionnée: {new_width}x{new_height}")
     
     def update_abilities_progression(self):
         """Met à jour les capacités du joueur - Évolution manuelle via upgrades seulement"""
@@ -669,30 +669,30 @@ class Game:
         wave_surface = self.font.render(wave_text, True, self.config.WHITE)
         self.screen.blit(wave_surface, (10, 60))
         
-        # Afficher les armes du joueur
+        # Afficher les armes du joueur (sans caractères spéciaux, avec espacement)
         weapons_text = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
         weapons_surface = self.small_font.render(weapons_text, True, self.config.CYAN)
         self.screen.blit(weapons_surface, (10, 85))
         
-        y_offset = 100
+        y_offset = 105  # Espacement augmenté
         for weapon in self.weapon_manager.weapons:
             weapon_text = f"  {weapon.name} Niv.{weapon.level}"
             weapon_surface = self.small_font.render(weapon_text, True, self.config.WHITE)
             self.screen.blit(weapon_surface, (10, y_offset))
-            y_offset += 15
+            y_offset += 40  # Espacement doublé de 20 à 40
         
-        # Afficher les compétences du joueur
-        y_offset += 5
-        skills_text = f"COMPÉTENCES ({len(self.skill_manager.skills)}/14):"
+        # Afficher les compétences du joueur (sans caractères spéciaux, avec espacement)
+        y_offset += 20  # Espacement avant section augmenté
+        skills_text = f"COMPETENCES ({len(self.skill_manager.skills)}/14):"
         skills_surface = self.small_font.render(skills_text, True, self.config.PURPLE)
         self.screen.blit(skills_surface, (10, y_offset))
-        y_offset += 15
+        y_offset += 40  # Espacement doublé de 20 à 40
         
         for skill in self.skill_manager.skills:
             skill_text = f"  {skill.name} Niv.{skill.level}"
             skill_surface = self.small_font.render(skill_text, True, self.config.WHITE)
             self.screen.blit(skill_surface, (10, y_offset))
-            y_offset += 15
+            y_offset += 40  # Espacement doublé de 20 à 40
         
         # Score
         score_text = f"Score: {self.score}"
@@ -702,13 +702,13 @@ class Game:
         self.screen.blit(score_surface, score_rect)
         
         # Afficher les bonus actifs
-        y_offset += 10
+        y_offset += 20
         for bonus_type, frames_left in self.bonus_manager.active_bonuses.items():
             seconds_left = frames_left / 60
             bonus_text = f"{bonus_type.replace('_', ' ').title()}: {seconds_left:.1f}s"
             bonus_surface = self.small_font.render(bonus_text, True, self.config.YELLOW)
             self.screen.blit(bonus_surface, (10, y_offset))
-            y_offset += 20
+            y_offset += 40  # Espacement doublé de 20 à 40
         
         # Afficher le bouclier s'il est actif
         if self.bonus_manager.shield_hits_remaining > 0:
@@ -798,7 +798,7 @@ class Game:
         y_offset += 50
         
         # === ARMES ACQUISES ===
-        weapons_title = f"⚔️ ARMES ({len(self.weapon_manager.weapons)}/7):"
+        weapons_title = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
         weapons_title_surface = self.small_font.render(weapons_title, True, self.config.CYAN)
         weapons_title_rect = weapons_title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
         self.screen.blit(weapons_title_surface, weapons_title_rect)
@@ -814,14 +814,14 @@ class Game:
         y_offset += 20
         
         # === COMPÉTENCES ACQUISES ===
-        skills_title = f"🎯 COMPÉTENCES ({len(self.skill_manager.skills)}/14):"
+        skills_title = f"COMPÉTENCES ({len(self.skill_manager.skills)}/14):"
         skills_title_surface = self.small_font.render(skills_title, True, self.config.PURPLE)
         skills_title_rect = skills_title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
         self.screen.blit(skills_title_surface, skills_title_rect)
         y_offset += 25
         
         if len(self.skill_manager.skills) == 0:
-            no_skills_text = "• Aucune compétence acquise"
+            no_skills_text = "Aucune compétence acquise"
             no_skills_surface = self.small_font.render(no_skills_text, True, (128, 128, 128))
             no_skills_rect = no_skills_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
             self.screen.blit(no_skills_surface, no_skills_rect)
@@ -1095,11 +1095,11 @@ class Game:
         self.upgrade_options = self.get_smart_upgrade_options()
     
     def get_upgrade_option_rects(self):
-        # Retourne les rects des 3 options pour la détection
+        # Retourne les rects des 3 options pour la détection (boutons agrandis x2)
         screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
-        opt_w, opt_h = 220, 64
+        opt_w, opt_h = 440, 128  # Agrandis x2 : 220->440, 64->128
         y = screen_h//2 - 80
-        return [pygame.Rect(screen_w//2-340+i*240, y, opt_w, opt_h) for i in range(3)]
+        return [pygame.Rect(screen_w//2-660+i*480, y, opt_w, opt_h) for i in range(3)]
     
     def draw_upgrade_screen(self):
         """Affiche l'écran de choix d'upgrade"""
@@ -1110,12 +1110,12 @@ class Game:
         overlay_x = (screen_w - overlay.get_width()) // 2
         overlay_y = (screen_h - overlay.get_height()) // 2
         self.screen.blit(overlay, (overlay_x, overlay_y))
-        # Titre
-        title = "Choisissez une amélioration" if not self.ban_mode else "Bannissez une option"
+        # Titre (sans caractères spéciaux)
+        title = "Choisissez une amelioration" if not self.ban_mode else "Bannissez une option"
         title_surface = self.font.render(title, True, self.config.WHITE)
         title_rect = title_surface.get_rect(center=(screen_w//2, overlay_y+60))
         self.screen.blit(title_surface, title_rect)
-        # Options
+        # Options (boutons agrandis avec texte adapté)
         for i, option in enumerate(self.upgrade_options):
             rect = self.get_upgrade_option_rects()[i]
             
@@ -1128,36 +1128,63 @@ class Game:
                 
             pygame.draw.rect(self.screen, color, rect, border_radius=12)
             
-            # Texte plus visible pour les nouvelles armes
+            # Texte adapté à la taille des boutons (police plus petite ou 2 lignes)
             text_color = self.config.BLACK if not option.get("is_new_weapon", False) else (139, 69, 19)
-            opt_surface = self.font.render(option["name"], True, text_color)  # Utilise font au lieu de small_font
-            opt_rect = opt_surface.get_rect(center=rect.center)
-            self.screen.blit(opt_surface, opt_rect)
-        # Boutons
-        btn_w, btn_h = 120, 48
+            
+            # Diviser le texte en 2 lignes si trop long
+            name = option["name"]
+            if len(name) > 15:  # Si le texte est trop long
+                # Chercher un point de coupure naturel
+                words = name.split()
+                if len(words) > 1:
+                    mid = len(words) // 2
+                    line1 = " ".join(words[:mid])
+                    line2 = " ".join(words[mid:])
+                    
+                    # Afficher sur 2 lignes
+                    line1_surface = self.small_font.render(line1, True, text_color)
+                    line2_surface = self.small_font.render(line2, True, text_color)
+                    
+                    line1_rect = line1_surface.get_rect(center=(rect.centerx, rect.centery - 12))
+                    line2_rect = line2_surface.get_rect(center=(rect.centerx, rect.centery + 12))
+                    
+                    self.screen.blit(line1_surface, line1_rect)
+                    self.screen.blit(line2_surface, line2_rect)
+                else:
+                    # Une seule ligne avec police plus petite
+                    opt_surface = self.small_font.render(name, True, text_color)
+                    opt_rect = opt_surface.get_rect(center=rect.center)
+                    self.screen.blit(opt_surface, opt_rect)
+            else:
+                # Texte court, police normale
+                opt_surface = self.font.render(name, True, text_color)
+                opt_rect = opt_surface.get_rect(center=rect.center)
+                self.screen.blit(opt_surface, opt_rect)
+        # Boutons ROLL, BAN, SKIP (agrandis)
+        btn_w, btn_h = 180, 72  # Agrandis : 120->180, 48->72
         btn_y = screen_h//2 + 120
         # ROLL
-        roll_rect = pygame.Rect(screen_w//2-200, btn_y, btn_w, btn_h)
+        roll_rect = pygame.Rect(screen_w//2-300, btn_y, btn_w, btn_h)  # Position ajustée
         roll_color = (200,200,200) if self.roll_count > 0 and not self.ban_mode else (100,100,100)
         pygame.draw.rect(self.screen, roll_color, roll_rect, border_radius=10)
         roll_text = f"ROLL ({self.roll_count})"
-        roll_surface = self.font.render(roll_text, True, self.config.BLACK)  # Utilise font au lieu de small_font
+        roll_surface = self.font.render(roll_text, True, self.config.BLACK)
         roll_rect_center = roll_surface.get_rect(center=roll_rect.center)
         self.screen.blit(roll_surface, roll_rect_center)
         
         # BAN
-        ban_rect = pygame.Rect(screen_w//2-60, btn_y, btn_w, btn_h)
+        ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)  # Position ajustée
         ban_color = (200,100,100) if self.ban_count > 0 and not self.ban_mode else (100,50,50)
         pygame.draw.rect(self.screen, ban_color, ban_rect, border_radius=10)
         ban_text = f"BAN ({self.ban_count})"
-        ban_surface = self.font.render(ban_text, True, self.config.BLACK)  # Utilise font au lieu de small_font
+        ban_surface = self.font.render(ban_text, True, self.config.BLACK)
         ban_rect_center = ban_surface.get_rect(center=ban_rect.center)
         self.screen.blit(ban_surface, ban_rect_center)
         
         # SKIP
-        skip_rect = pygame.Rect(screen_w//2+80, btn_y, btn_w, btn_h)
+        skip_rect = pygame.Rect(screen_w//2+120, btn_y, btn_w, btn_h)  # Position ajustée
         pygame.draw.rect(self.screen, (180,180,180), skip_rect, border_radius=10)
-        skip_surface = self.font.render("SKIP", True, self.config.BLACK)  # Utilise font au lieu de small_font
+        skip_surface = self.font.render("SKIP", True, self.config.BLACK)
         skip_rect_center = skip_surface.get_rect(center=skip_rect.center)
         self.screen.blit(skip_surface, skip_rect_center)
 
@@ -1304,15 +1331,15 @@ class Game:
         # === NOUVELLES ARMES ===
         if upgrade_id == "weapon_lightning":
             if self.weapon_manager.add_weapon(LightningWeapon):
-                print("⚡ LIGHTNING DÉBLOQUÉ ! Nouvelle arme disponible !")
+                print("LIGHTNING DÉBLOQUÉ ! Nouvelle arme disponible !")
             else:
-                print("❌ Impossible d'ajouter Lightning : limite d'armes atteinte")
+                print("Impossible d'ajouter Lightning : limite d'armes atteinte")
         
         elif upgrade_id == "weapon_beam":
             if self.weapon_manager.add_weapon(BeamWeapon):
-                print("🔴 BEAM DÉBLOQUÉ ! Nouvelle arme disponible !")
+                print("BEAM DÉBLOQUÉ ! Nouvelle arme disponible !")
             else:
-                print("❌ Impossible d'ajouter Beam : limite d'armes atteinte")
+                print("Impossible d'ajouter Beam : limite d'armes atteinte")
         
         # === AMÉLIORATIONS D'ARMES ===
         elif upgrade_id.startswith("upgrade_weapon_"):
@@ -1320,28 +1347,28 @@ class Game:
             if self.weapon_manager.upgrade_weapon(weapon_name):
                 weapon_info = next((w for w in self.weapon_manager.get_weapon_list() if w['name'] == weapon_name), None)
                 if weapon_info:
-                    print(f"⚔️ {weapon_name} amélioré au niveau {weapon_info['level']} !")
+                    print(f"{weapon_name} amélioré au niveau {weapon_info['level']} !")
             else:
-                print(f"❌ Impossible d'améliorer {weapon_name}")
+                print(f"Impossible d'améliorer {weapon_name}")
         
         # === NOUVELLES COMPÉTENCES ===
         elif upgrade_id == "skill_speed":
             if self.skill_manager.add_skill(SpeedSkill):
-                print("🏃🆕 COMPÉTENCE VITESSE DÉBLOQUÉE !")
+                print("COMPÉTENCE VITESSE DÉBLOQUÉE !")
             else:
-                print("❌ Impossible d'ajouter Vitesse : limite de compétences atteinte")
+                print("Impossible d'ajouter Vitesse : limite de compétences atteinte")
         
         elif upgrade_id == "skill_shield":
             if self.skill_manager.add_skill(ShieldSkill):
-                print("🛡️🆕 COMPÉTENCE BOUCLIER DÉBLOQUÉE !")
+                print("COMPÉTENCE BOUCLIER DÉBLOQUÉE !")
             else:
-                print("❌ Impossible d'ajouter Bouclier : limite de compétences atteinte")
+                print("Impossible d'ajouter Bouclier : limite de compétences atteinte")
         
         elif upgrade_id == "skill_regen":
             if self.skill_manager.add_skill(RegenSkill):
-                print("❤️🆕 COMPÉTENCE RÉGÉNÉRATION DÉBLOQUÉE !")
+                print("COMPÉTENCE RÉGÉNÉRATION DÉBLOQUÉE !")
             else:
-                print("❌ Impossible d'ajouter Régénération : limite de compétences atteinte")
+                print("Impossible d'ajouter Régénération : limite de compétences atteinte")
         
         # === AMÉLIORATIONS DE COMPÉTENCES ===
         elif upgrade_id.startswith("upgrade_skill_"):
@@ -1349,12 +1376,12 @@ class Game:
             if self.skill_manager.upgrade_skill(skill_name):
                 skill_info = next((s for s in self.skill_manager.get_skill_list() if s['name'] == skill_name), None)
                 if skill_info:
-                    print(f"🎯 {skill_name} amélioré au niveau {skill_info['level']} !")
+                    print(f"{skill_name} amélioré au niveau {skill_info['level']} !")
             else:
-                print(f"❌ Impossible d'améliorer {skill_name}")
+                print(f"Impossible d'améliorer {skill_name}")
         
         else:
-            print(f"⚠️ Upgrade non reconnu: {upgrade_id}")
+            print(f"Upgrade non reconnu: {upgrade_id}")
     
     def get_smart_upgrade_options(self):
         """Génère des options d'upgrade intelligentes basées sur le nouveau système d'armes et compétences"""
@@ -1364,7 +1391,7 @@ class Game:
         if not self.weapon_manager.has_weapon("Lightning") and len(self.weapon_manager.weapons) < 7:
             available_upgrades.append({
                 "id": "weapon_lightning", 
-                "name": "🆕 DÉBLOQUER: Lightning", 
+                "name": "DÉBLOQUER: Lightning", 
                 "description": "Nouvelle arme: Lightning instantanés avec chaînage !",
                 "is_new_weapon": True
             })
@@ -1372,7 +1399,7 @@ class Game:
         if not self.weapon_manager.has_weapon("Beam") and len(self.weapon_manager.weapons) < 7:
             available_upgrades.append({
                 "id": "weapon_beam", 
-                "name": "🆕 DÉBLOQUER: Beam", 
+                "name": "DÉBLOQUER: Beam", 
                 "description": "Nouvelle arme: Rayon laser qui traverse les ennemis !",
                 "is_new_weapon": True
             })
@@ -1391,7 +1418,7 @@ class Game:
         if not self.skill_manager.has_skill("Vitesse") and len(self.skill_manager.skills) < 14:
             available_upgrades.append({
                 "id": "skill_speed", 
-                "name": "🆕 COMPÉTENCE: Vitesse", 
+                "name": "COMPÉTENCE: Vitesse", 
                 "description": "Nouvelle compétence: Augmente la vitesse de déplacement !",
                 "is_new_weapon": True
             })
@@ -1399,7 +1426,7 @@ class Game:
         if not self.skill_manager.has_skill("Bouclier") and len(self.skill_manager.skills) < 14:
             available_upgrades.append({
                 "id": "skill_shield", 
-                "name": "🆕 COMPÉTENCE: Bouclier", 
+                "name": "COMPÉTENCE: Bouclier", 
                 "description": "Nouvelle compétence: Protection contre les dégâts !",
                 "is_new_weapon": True
             })
@@ -1407,7 +1434,7 @@ class Game:
         if not self.skill_manager.has_skill("Régénération") and len(self.skill_manager.skills) < 14:
             available_upgrades.append({
                 "id": "skill_regen", 
-                "name": "🆕 COMPÉTENCE: Régénération", 
+                "name": "COMPÉTENCE: Régénération", 
                 "description": "Nouvelle compétence: Récupère la vie au fil du temps !",
                 "is_new_weapon": True
             })
@@ -1463,4 +1490,4 @@ class Game:
             self.energy_orbs.clear()
             self.recreate_all_energy_orbs()
         
-        print(f"🖼️ Fenêtre redimensionnée: {new_width}x{new_height}")
+        print(f"Fenêtre redimensionnée: {new_width}x{new_height}")
