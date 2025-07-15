@@ -17,10 +17,10 @@ class Background:
         
         # Charger le tileset
         try:
-            self.tileset = pygame.image.load("Tileset.png").convert_alpha()
+            self.tileset = pygame.image.load("assets/Tileset.png").convert_alpha()
             self.extract_tiles()
         except pygame.error:
-            print("⚠️  Impossible de charger Tileset.png")
+            print("⚠️  Impossible de charger assets/Tileset.png")
             self.tileset = None
             self.tiles = None
             

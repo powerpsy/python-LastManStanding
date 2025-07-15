@@ -1,4 +1,5 @@
 import pygame
+import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
 from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb, BonusManager, Beam
@@ -10,7 +11,18 @@ class Game:
     
     def __init__(self, config):
         self.config = config
-        self.screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.RESIZABLE)
+        # Configurer l'affichage avec antialiasing si disponible
+        flags = pygame.RESIZABLE
+        if config.ENABLE_ANTIALIASING:
+            # Essayer d'activer le multisampling (antialiasing matériel)
+            try:
+                pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLEBUFFERS, 1)
+                pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLESAMPLES, 4)
+            except:
+                # Si le multisampling n'est pas disponible, continuer sans
+                pass
+        
+        self.screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), flags)
         pygame.display.set_caption("Last Man Standing")
         self.clock = pygame.time.Clock()
         

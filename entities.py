@@ -3,6 +3,7 @@ Classes du joueur et des entités du jeu
 """
 
 import pygame
+import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
 
@@ -37,7 +38,7 @@ class Player:
         
         # Charger la spritesheet Birds.png
         try:
-            spritesheet = pygame.image.load("Birds.png").convert_alpha()
+            spritesheet = pygame.image.load("assets/Birds.png").convert_alpha()
             
             # Dimensions des sprites individuels (64x64 pixels)
             sprite_width = 64
@@ -51,18 +52,25 @@ class Player:
                 frame_rect = pygame.Rect(i * sprite_width, 0, sprite_width, sprite_height)
                 frame = spritesheet.subsurface(frame_rect).copy()
                 
-                # Redimensionner le sprite
-                frame_scaled = pygame.transform.scale(frame, (sprite_size, sprite_size))
+                # Redimensionner le sprite avec antialiasing si activé
+                if config.SPRITE_SMOOTHING:
+                    frame_scaled = pygame.transform.smoothscale(frame, (sprite_size, sprite_size))
+                else:
+                    frame_scaled = pygame.transform.scale(frame, (sprite_size, sprite_size))
+                
+                # Optimiser le format pour un rendu plus rapide
+                frame_scaled = frame_scaled.convert_alpha()
                 self.animation_frames.append(frame_scaled)
                 
                 # Créer la version miroir pour la gauche
                 frame_left = pygame.transform.flip(frame_scaled, True, False)
+                frame_left = frame_left.convert_alpha()  # Optimiser aussi la version miroir
                 self.animation_frames_left.append(frame_left)
             
             self.has_image = True
             print(f"Animation spritesheet du joueur activée (3 frames, séquence 1-2-3-2)")
         except (pygame.error, FileNotFoundError):
-            print("Spritesheet Birds.png non trouvée, utilisation du rendu par défaut")
+            print("Spritesheet assets/Birds.png non trouvée, utilisation du rendu par défaut")
             self.animation_frames = []
             self.animation_frames_left = []
             self.has_image = False
@@ -143,11 +151,20 @@ class Player:
                 self.current_frame = 0
         else:
             # Fallback : dessiner un cercle si l'image n'est pas disponible
-            pygame.draw.circle(screen, self.config.PLAYER_COLOR,
-                             (int(self.x + self.size//2), int(self.y + self.size//2)),
-                             self.size//2)
+            center_x = int(self.x + self.size//2)
+            center_y = int(self.y + self.size//2)
+            radius = self.size//2
             
-            # Contour blanc
+            # Utiliser l'antialiasing si activé
+            if self.config.ENABLE_ANTIALIASING:
+                pygame.gfxdraw.filled_circle(screen, center_x, center_y, radius, self.config.PLAYER_COLOR)
+                pygame.gfxdraw.aacircle(screen, center_x, center_y, radius, self.config.PLAYER_COLOR)
+                # Contour blanc avec antialiasing
+                pygame.gfxdraw.aacircle(screen, center_x, center_y, radius, self.config.WHITE)
+            else:
+                pygame.draw.circle(screen, self.config.PLAYER_COLOR, (center_x, center_y), radius)
+                # Contour blanc
+                pygame.draw.circle(screen, self.config.WHITE, (center_x, center_y), radius, 1)
             pygame.draw.circle(screen, self.config.WHITE,
                              (int(self.x + self.size//2), int(self.y + self.size//2)),
                              self.size//2, 2)
@@ -191,7 +208,7 @@ class Enemy:
             try:
                 # Charger les sprites 1.png à 5.png
                 for i in range(1, 21):
-                    sprite_path = f"Enemy/{i}.png"
+                    sprite_path = f"assets/Enemy/{i}.png"
                     sprite = pygame.image.load(sprite_path).convert_alpha()
                     # Les sprites sont maintenant redimensionnés selon le preset actuel
                     # La taille sera définie lors de l'initialisation de l'ennemi
@@ -217,9 +234,14 @@ class Enemy:
         # Choisir un sprite aléatoire pour cet ennemi et le redimensionner à la bonne taille
         if Enemy.sprites:
             self.sprite_id = random.choice(list(Enemy.sprites.keys()))
-            # Redimensionner le sprite original à la taille définie dans le preset
+            # Redimensionner le sprite original à la taille définie dans le preset avec antialiasing
             original_sprite = Enemy.sprites[self.sprite_id]
-            self.sprite = pygame.transform.scale(original_sprite, (self.size, self.size))
+            if config.SPRITE_SMOOTHING:
+                self.sprite = pygame.transform.smoothscale(original_sprite, (self.size, self.size))
+            else:
+                self.sprite = pygame.transform.scale(original_sprite, (self.size, self.size))
+            # Optimiser le format pour un rendu plus rapide
+            self.sprite = self.sprite.convert_alpha()
         else:
             self.sprite_id = None
             self.sprite = None
@@ -237,9 +259,14 @@ class Enemy:
             self.bonus_type = random.choice(config.BONUS_TYPES)
             # Taille x2 pour les ennemis spéciaux
             self.size = config.ENEMY_SIZE * 2
-            # Redimensionner le sprite à la nouvelle taille
+            # Redimensionner le sprite à la nouvelle taille avec antialiasing
             if self.sprite:
-                self.sprite = pygame.transform.scale(Enemy.sprites[self.sprite_id], (self.size, self.size))
+                if config.SPRITE_SMOOTHING:
+                    self.sprite = pygame.transform.smoothscale(Enemy.sprites[self.sprite_id], (self.size, self.size))
+                else:
+                    self.sprite = pygame.transform.scale(Enemy.sprites[self.sprite_id], (self.size, self.size))
+                # Optimiser le format
+                self.sprite = self.sprite.convert_alpha()
         else:
             # Points de vie normaux avec progression par vague
             self.max_health = base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE
@@ -316,21 +343,54 @@ class Enemy:
             # Fallback : dessiner des carrés colorés si les sprites ne sont pas chargés
             enemy_color = self.config.ENEMY_COLOR  # Couleur normale pour tous les ennemis
             
-            # Corps principal (pas de rotation pour le fallback pour garder les performances)
-            pygame.draw.rect(screen, enemy_color,
-                            (int(self.x), int(self.y), self.size, self.size))
+            # Corps principal avec antialiasing si activé
+            if self.config.ENABLE_ANTIALIASING:
+                # Utiliser un rectangle avec antialiasing (approximation avec gfxdraw)
+                points = [
+                    (int(self.x), int(self.y)),
+                    (int(self.x + self.size), int(self.y)),
+                    (int(self.x + self.size), int(self.y + self.size)),
+                    (int(self.x), int(self.y + self.size))
+                ]
+                pygame.gfxdraw.filled_polygon(screen, points, enemy_color)
+                pygame.gfxdraw.aapolygon(screen, points, enemy_color)
+                
+                # Contour blanc avec antialiasing (plus épais pour les ennemis spéciaux)
+                border_width = 3 if self.is_special else 2
+                for i in range(border_width):
+                    border_points = [
+                        (int(self.x - i), int(self.y - i)),
+                        (int(self.x + self.size + i), int(self.y - i)),
+                        (int(self.x + self.size + i), int(self.y + self.size + i)),
+                        (int(self.x - i), int(self.y + self.size + i))
+                    ]
+                    pygame.gfxdraw.aapolygon(screen, border_points, self.config.WHITE)
+            else:
+                # Rendu normal sans antialiasing
+                pygame.draw.rect(screen, enemy_color,
+                                (int(self.x), int(self.y), self.size, self.size))
+                
+                # Contour blanc (plus épais pour les ennemis spéciaux)
+                border_width = 3 if self.is_special else 2
+                pygame.draw.rect(screen, self.config.WHITE,
+                                (int(self.x), int(self.y), self.size, self.size), border_width)
             
-            # Contour blanc (plus épais pour les ennemis spéciaux)
-            border_width = 3 if self.is_special else 2
-            pygame.draw.rect(screen, self.config.WHITE,
-                            (int(self.x), int(self.y), self.size, self.size), border_width)
-            
-            # Effet scintillant pour les ennemis spéciaux
+            # Effet scintillant pour les ennemis spéciaux (inchangé)
             if self.is_special:
                 pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
                 glow_color = (255, 255, 255, pulse)
                 glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
-                pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
+                if self.config.ENABLE_ANTIALIASING:
+                    # Contour avec antialiasing pour l'effet de scintillement
+                    glow_points = [
+                        (int(self.x - 2), int(self.y - 2)),
+                        (int(self.x + self.size + 2), int(self.y - 2)),
+                        (int(self.x + self.size + 2), int(self.y + self.size + 2)),
+                        (int(self.x - 2), int(self.y + self.size + 2))
+                    ]
+                    pygame.gfxdraw.aapolygon(screen, glow_points, self.config.WHITE)
+                else:
+                    pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
         
         # Barre de santé si endommagé (au-dessus du sprite)
         if self.health < self.max_health:
@@ -721,26 +781,44 @@ class BonusManager:
 
 
 class Beam:
-    """Classe pour les rayons laser continus"""
+    """
+    Classe pour les rayons laser continus
     
-    def __init__(self, start_x, start_y, direction_x, direction_y, config, level):
+    NOUVEAU COMPORTEMENT:
+    - Le point de destination (fixed_end_x, fixed_end_y) est fixé lors de la création
+    - Le point d'origine (start_x, start_y) suit le joueur en temps réel
+    - La direction et la portée sont recalculées à chaque frame
+    - Cela crée un effet de "faisceau pivotant" depuis le joueur vers un point fixe
+    """
+    
+    def __init__(self, start_x, start_y, direction_x, direction_y, config, level, player=None):
         from weapon_config import get_weapon_stat
         
+        # Point d'origine initial (sera mis à jour avec le joueur)
         self.start_x = start_x
         self.start_y = start_y
-        self.direction_x = direction_x
-        self.direction_y = direction_y
+        
+        # Point de destination FIXE (calculé une seule fois)
+        self.range = get_weapon_stat("Beam", "range", level)
+        self.fixed_end_x = start_x + direction_x * self.range
+        self.fixed_end_y = start_y + direction_y * self.range
+        
+        # Référence au joueur pour suivre ses mouvements
+        self.player = player
+        
         self.config = config
         self.level = level
         
         # Propriétés du faisceau
-        self.range = get_weapon_stat("Beam", "range", level)
         self.width = get_weapon_stat("Beam", "width", level)
         self.damage = get_weapon_stat("Beam", "damage", level)
         
-        # Calculer le point final du rayon
-        self.end_x = self.start_x + self.direction_x * self.range
-        self.end_y = self.start_y + self.direction_y * self.range
+        # Direction et point final actuels (recalculés à chaque frame)
+        self.current_direction_x = direction_x
+        self.current_direction_y = direction_y
+        self.current_end_x = self.fixed_end_x
+        self.current_end_y = self.fixed_end_y
+        self.current_range = self.range
         
         # Durée de vie du faisceau
         self.duration = config.BEAM_DURATION if hasattr(config, 'BEAM_DURATION') else 60
@@ -752,6 +830,33 @@ class Beam:
     def update(self):
         """Met à jour le faisceau"""
         self.current_life -= 1
+        
+        # Mettre à jour la position d'origine avec le joueur
+        if self.player:
+            player_center_x = self.player.x + self.player.size // 2
+            player_center_y = self.player.y + self.player.size // 2
+            self.start_x = player_center_x
+            self.start_y = player_center_y
+            
+            # Recalculer la direction vers le point de destination fixe
+            dx = self.fixed_end_x - self.start_x
+            dy = self.fixed_end_y - self.start_y
+            current_distance = math.sqrt(dx**2 + dy**2)
+            
+            if current_distance > 0:
+                self.current_direction_x = dx / current_distance
+                self.current_direction_y = dy / current_distance
+                self.current_range = current_distance
+                self.current_end_x = self.fixed_end_x
+                self.current_end_y = self.fixed_end_y
+            else:
+                # Si le joueur est exactement sur le point de destination
+                self.current_direction_x = 0
+                self.current_direction_y = 0
+                self.current_range = 0
+                self.current_end_x = self.start_x
+                self.current_end_y = self.start_y
+        
         return self.current_life > 0
     
     def check_collision_with_enemies(self, enemies):
@@ -791,27 +896,27 @@ class Beam:
     
     def point_to_line_distance(self, px, py):
         """Calcule la distance d'un point à la ligne du rayon"""
-        # Vecteur de la ligne
-        line_length = math.sqrt(self.direction_x**2 + self.direction_y**2)
+        # Utiliser la direction actuelle
+        line_length = math.sqrt(self.current_direction_x**2 + self.current_direction_y**2)
         if line_length == 0:
             return math.sqrt((px - self.start_x)**2 + (py - self.start_y)**2)
         
         # Distance perpendiculaire à la ligne
-        t = ((px - self.start_x) * self.direction_x + (py - self.start_y) * self.direction_y) / (line_length**2)
+        t = ((px - self.start_x) * self.current_direction_x + (py - self.start_y) * self.current_direction_y) / (line_length**2)
         
         # Point le plus proche sur la ligne
-        closest_x = self.start_x + t * self.direction_x * line_length
-        closest_y = self.start_y + t * self.direction_y * line_length
+        closest_x = self.start_x + t * self.current_direction_x * line_length
+        closest_y = self.start_y + t * self.current_direction_y * line_length
         
         return math.sqrt((px - closest_x)**2 + (py - closest_y)**2)
     
     def project_point_on_line(self, px, py):
         """Projette un point sur la ligne et retourne la position normalisée (0-1)"""
-        line_length_sq = self.range**2
+        line_length_sq = self.current_range**2
         if line_length_sq == 0:
             return 0
         
-        t = ((px - self.start_x) * self.direction_x + (py - self.start_y) * self.direction_y) * self.range / line_length_sq
+        t = ((px - self.start_x) * self.current_direction_x + (py - self.start_y) * self.current_direction_y) * self.current_range / line_length_sq
         return max(0, min(1, t))
     
     def draw(self, screen, camera_x=0, camera_y=0):
@@ -826,9 +931,9 @@ class Beam:
         core_color = tuple(int(c * intensity) for c in (255, 100, 100))  # Rouge/orange
         glow_color = tuple(int(c * intensity * 0.6) for c in (255, 200, 150))  # Lueur plus douce
         
-        # Points ajustés pour la caméra
+        # Points ajustés pour la caméra (utiliser les coordonnées actuelles)
         start_point = (int(self.start_x - camera_x), int(self.start_y - camera_y))
-        end_point = (int(self.end_x - camera_x), int(self.end_y - camera_y))
+        end_point = (int(self.current_end_x - camera_x), int(self.current_end_y - camera_y))
         
         # Dessiner la lueur (plus large)
         if self.width > 2:

@@ -284,8 +284,8 @@ class BeamWeapon(Weapon):
         else:
             direction_x, direction_y = 1, 0
         
-        # Créer le faisceau laser
-        beam = Beam(player_center_x, player_center_y, direction_x, direction_y, config, self.level)
+        # Créer le faisceau laser avec référence au joueur
+        beam = Beam(player_center_x, player_center_y, direction_x, direction_y, config, self.level, player)
         projectiles.append(beam)
         
         self.fire_timer = 0

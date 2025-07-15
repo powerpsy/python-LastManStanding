@@ -7,6 +7,10 @@ class Config:
         # Détecter la résolution de l'écran pour choisir le meilleur preset
         self.detect_and_set_resolution(forced_screen_size)
         
+        # Configuration de l'antialiasing pour un rendu plus lisse
+        self.ENABLE_ANTIALIASING = True
+        self.SPRITE_SMOOTHING = True  # Utilise un algorithme de lissage pour les sprites
+        
         # Couleurs principales (fixes pour tous les presets)
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
