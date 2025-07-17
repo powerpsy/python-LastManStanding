@@ -2,7 +2,7 @@ import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect
+from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart
 from background import Background
 from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, ShieldSkill, RegenSkill
 
@@ -52,6 +52,7 @@ class Game:
         self.welding_particles = []  # Nouvelle liste pour les particules de soudure du Beam
         self.energy_orbs = []  # Nouvelle liste pour les boules d'énergie
         self.death_effects = []  # Nouvelle liste pour les effets de mort
+        self.collectibles = []  # Nouvelle liste pour les objets collectibles
         
         # Gestion des vagues d'ennemis
         self.wave_number = 1
@@ -122,9 +123,9 @@ class Game:
                     overlay_y = (screen_h - int(screen_h*0.75)) // 2  # Position de l'overlay
                     btn_y = overlay_y + 30  # Même position que dans draw_upgrade_screen
                     # Positions centrées par rapport aux upgrades
-                    roll_rect = pygame.Rect(screen_w//2-270, btn_y, btn_w, btn_h)  # Recentré
+                    roll_rect = pygame.Rect(screen_w//2-320, btn_y, btn_w, btn_h)  # Recentré
                     ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)   # Centre
-                    skip_rect = pygame.Rect(screen_w//2+90, btn_y, btn_w, btn_h)  # Recentré
+                    skip_rect = pygame.Rect(screen_w//2+140, btn_y, btn_w, btn_h)  # Recentré
                     
                     # Sélection d'une option d'upgrade (clic sur les cadres englobants)
                     if not self.ban_mode:
@@ -156,7 +157,7 @@ class Game:
                     # ALWAYS SKIP (seulement si aucune option disponible)
                     elif len(self.upgrade_options) == 0:
                         # Définir le rect du bouton Always Skip
-                        always_skip_rect = pygame.Rect(screen_w//2+270, btn_y, btn_w, btn_h)
+                        always_skip_rect = pygame.Rect(screen_w//2+320, btn_y, btn_w, btn_h)
                         if always_skip_rect.collidepoint(mx, my):
                             print("🚀 Mode 'Always Skip' activé ! Plus d'écrans d'upgrade jusqu'à la fin de la partie.")
                             self.always_skip_mode = True
@@ -347,6 +348,8 @@ class Game:
                     # Supprimer les ennemis morts de la liste
                     for enemy in enemies_to_remove:
                         if enemy in self.enemies:  # Vérification de sécurité
+                            # Gérer les drops avant de supprimer l'ennemi
+                            self.handle_enemy_drops(enemy)
                             self.enemies.remove(enemy)
                 elif weapon.name == "Beam":
                     weapon.fire(self.player, self.enemies, self.beams, self.config)
@@ -359,6 +362,9 @@ class Game:
         
         # Vérification de sécurité : s'assurer d'avoir le bon nombre d'orb (uniquement si débloqué)
         self.ensure_correct_orb_count()
+        
+        # Mettre à jour les collectibles
+        self.update_collectibles()
         
         # Nettoyer toutes les entités (optimisé)
         self.cleanup_entities()
@@ -600,6 +606,8 @@ class Game:
                 
                 # Vérifier que l'ennemi est encore dans la liste (au cas où le bonus l'aurait supprimé)
                 if enemy in self.enemies:
+                    # Gérer les drops avant de supprimer l'ennemi
+                    self.handle_enemy_drops(enemy)
                     self.enemies.remove(enemy)
                     self.enemies_killed += 1  # Incrémenter les statistiques
                 self.score += self.config.SCORE_PER_LIGHTNING_KILL  # Plus de points pour les lightning
@@ -658,12 +666,53 @@ class Game:
         # Explosion supplémentaire (double effet)
         for _ in range(self.config.PARTICLE_COUNT):
             particle = Particle(x, y, self.config)
-            # Modifier légèrement les propriétés pour plus de variété
-            particle.vel_x *= random.uniform(0.8, 1.4)
-            particle.vel_y *= random.uniform(0.8, 1.4)
-            particle.lifetime = int(particle.lifetime * random.uniform(0.8, 1.3))
-            particle.current_life = particle.lifetime
             self.particles.append(particle)
+    
+    def handle_enemy_drops(self, enemy):
+        """Gère les drops d'objets collectibles quand un ennemi meurt"""
+        # Compter le nombre de cœurs actuellement sur le terrain
+        current_hearts = sum(1 for collectible in self.collectibles if isinstance(collectible, Heart))
+        
+        # Vérifier si un coeur doit être lâché (probabilité de 1/200 pour tous les ennemis)
+        if random.random() < self.config.HEART_DROP_PROBABILITY:
+            # Vérifier la limite maximum de cœurs sur le terrain
+            if current_hearts >= self.config.HEART_MAX_ON_FIELD:
+                print(f"💔 Limite de {self.config.HEART_MAX_ON_FIELD} cœurs atteinte - aucun cœur supplémentaire lâché")
+                return
+            
+            # Déterminer le nombre de coeurs à lâcher
+            if enemy.is_special:
+                drop_count = self.config.HEART_ELITE_DROP_COUNT
+            else:
+                drop_count = self.config.HEART_NORMAL_DROP_COUNT
+            
+            # Limiter le nombre de coeurs à créer pour ne pas dépasser la limite
+            drop_count = min(drop_count, self.config.HEART_MAX_ON_FIELD - current_hearts)
+            
+            # Créer les coeurs
+            for i in range(drop_count):
+                # Position légèrement décalée pour éviter la superposition
+                offset_x = random.uniform(-20, 20)
+                offset_y = random.uniform(-20, 20)
+                
+                heart = Heart(
+                    enemy.x + offset_x, 
+                    enemy.y + offset_y, 
+                    self.config
+                )
+                self.collectibles.append(heart)
+                
+            print(f"💚 Ennemi {enemy.sprite_id} {'spécial' if enemy.is_special else 'normal'} tué - {drop_count} coeur(s) lâché(s) ! (probabilité {self.config.HEART_DROP_PROBABILITY:.1%}) [{current_hearts + drop_count}/{self.config.HEART_MAX_ON_FIELD}]")
+    
+    def update_collectibles(self):
+        """Met à jour tous les objets collectibles"""
+        for collectible in self.collectibles[:]:
+            collectible.update(self.player.x, self.player.y)
+            
+            # Vérifier si l'objet a été collecté
+            if collectible.is_collected:
+                collectible.on_collect(self.player)
+                self.collectibles.remove(collectible)
     
     def check_collision(self, obj1, obj2):
         """Vérifie la collision circulaire entre deux objets"""
@@ -829,12 +878,20 @@ class Game:
         score_rect.topright = (self.config.WINDOW_WIDTH - 10, 10)
         self.screen.blit(score_surface, score_rect)
         
+        # Compteur de cœurs sur le terrain
+        hearts_count = sum(1 for collectible in self.collectibles if isinstance(collectible, Heart))
+        hearts_text = f"Coeurs: {hearts_count}/{self.config.HEART_MAX_ON_FIELD}"
+        hearts_surface = self.font.render(hearts_text, True, self.config.GREEN)
+        hearts_rect = hearts_surface.get_rect()
+        hearts_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
+        self.screen.blit(hearts_surface, hearts_rect)
+        
         # Indicateur "Always Skip" si activé
         if self.always_skip_mode:
             always_skip_text = "🚀 ALWAYS SKIP ACTIF"
             always_skip_surface = self.font.render(always_skip_text, True, (100, 255, 100))
             always_skip_rect = always_skip_surface.get_rect()
-            always_skip_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
+            always_skip_rect.topright = (self.config.WINDOW_WIDTH - 10, 90)
             self.screen.blit(always_skip_surface, always_skip_rect)
         
         # Afficher les bonus actifs
@@ -1440,14 +1497,14 @@ class Game:
             self.screen.blit(no_options_surface, no_options_rect)
             
             # Bouton "Always Skip" à droite des autres boutons
-            always_skip_rect = pygame.Rect(screen_w//2+270, btn_y, btn_w, btn_h)
+            always_skip_rect = pygame.Rect(screen_w//2+320, btn_y, btn_w, btn_h)
             pygame.draw.rect(self.screen, (100,200,100), always_skip_rect, border_radius=10)
             always_skip_surface = self.font.render("ALWAYS SKIP", True, self.config.BLACK)
             always_skip_rect_center = always_skip_surface.get_rect(center=always_skip_rect.center)
             self.screen.blit(always_skip_surface, always_skip_rect_center)
         
         # ROLL (recentré) - désactivé s'il n'y a pas d'options
-        roll_rect = pygame.Rect(screen_w//2-270, btn_y, btn_w, btn_h)
+        roll_rect = pygame.Rect(screen_w//2-320, btn_y, btn_w, btn_h)
         roll_enabled = self.roll_count > 0 and not self.ban_mode and len(self.upgrade_options) > 0
         roll_color = (200,200,200) if roll_enabled else (100,100,100)
         pygame.draw.rect(self.screen, roll_color, roll_rect, border_radius=10)
@@ -1467,7 +1524,7 @@ class Game:
         self.screen.blit(ban_surface, ban_rect_center)
         
         # SKIP (recentré)
-        skip_rect = pygame.Rect(screen_w//2+90, btn_y, btn_w, btn_h)
+        skip_rect = pygame.Rect(screen_w//2+140, btn_y, btn_w, btn_h)
         pygame.draw.rect(self.screen, (180,180,180), skip_rect, border_radius=10)
         skip_surface = self.font.render("SKIP", True, self.config.BLACK)
         skip_rect_center = skip_surface.get_rect(center=skip_rect.center)
@@ -1517,6 +1574,10 @@ class Game:
         for death_effect in self.death_effects:
             death_effect.draw(self.screen, camera_x, camera_y)
         
+        # Dessiner les collectibles (coeurs, etc.)
+        for collectible in self.collectibles:
+            collectible.draw(self.screen, camera_x, camera_y)
+        
         # Dessiner le joueur EN DERNIER (au premier plan)
         self.draw_entity_with_camera_offset(self.player, camera_x, camera_y)
 
@@ -1560,6 +1621,8 @@ class Game:
                         
                         # Vérifier que l'ennemi est encore dans la liste
                         if enemy in self.enemies:
+                            # Gérer les drops avant de supprimer l'ennemi
+                            self.handle_enemy_drops(enemy)
                             self.enemies.remove(enemy)
                             self.enemies_killed += 1  # Incrémenter les statistiques
                         self.score += self.config.SCORE_PER_ENEMY_KILL
@@ -1631,6 +1694,8 @@ class Game:
                         
                         # Vérifier que l'ennemi est encore dans la liste
                         if enemy in self.enemies:
+                            # Gérer les drops avant de supprimer l'ennemi
+                            self.handle_enemy_drops(enemy)
                             self.enemies.remove(enemy)
                             self.enemies_killed += 1  # Incrémenter les statistiques
                         self.score += self.config.SCORE_PER_ENEMY_KILL

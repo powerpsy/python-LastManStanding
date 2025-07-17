@@ -284,6 +284,15 @@ class Config:
             "damage_boost", "speed_boost", "shield", "lightning_boost", "orb_boost"
         ]
         
+        # Paramètres des objets collectibles
+        self.COLLECTIBLE_PICKUP_DISTANCE = 120  # Distance minimum pour attirer l'objet
+        self.COLLECTIBLE_ATTRACTION_SPEED = 8  # Vitesse d'attraction vers le joueur
+        self.HEART_HEAL_AMOUNT = 20  # Points de vie récupérés par coeur
+        self.HEART_DROP_PROBABILITY = 1/200  # Probabilité de drop de coeur (1/200 = 0.5%)
+        self.HEART_ELITE_DROP_COUNT = 3  # Nombre de coeurs lâchés par les ennemis spéciaux
+        self.HEART_NORMAL_DROP_COUNT = 1  # Nombre de coeurs lâchés par les ennemis normaux
+        self.HEART_MAX_ON_FIELD = 100  # Nombre maximum de coeurs sur le terrain
+        
         # Paramètres des bonus temporaires (identiques pour tous)
         self.BONUS_HEAL_AMOUNT = 30
         self.BONUS_SHIELD_HITS = 3

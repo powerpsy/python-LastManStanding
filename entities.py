@@ -408,6 +408,221 @@ class Enemy:
                            (int(self.x), int(self.y - 8), current_width, bar_height))
 
 
+class Enemy:
+    """Classe des ennemis avec IA de poursuite"""
+    
+    # Variables de classe pour les sprites (chargés une seule fois)
+    sprites = None
+    sprites_loaded = False
+    
+    @classmethod
+    def load_sprites(cls):
+        """Charge tous les sprites d'ennemis une seule fois"""
+        if not cls.sprites_loaded:
+            cls.sprites = {}
+            try:
+                # Charger les sprites 1.png à 5.png
+                for i in range(1, 24):
+                    sprite_path = f"assets/Enemy/{i}.png"
+                    sprite = pygame.image.load(sprite_path).convert_alpha()
+                    # Les sprites sont maintenant redimensionnés selon le preset actuel
+                    # La taille sera définie lors de l'initialisation de l'ennemi
+                    cls.sprites[i] = sprite  # Garder le sprite original pour le redimensionner plus tard
+                cls.sprites_loaded = True
+                print(f"{len(cls.sprites)} sprites d'ennemis chargés (redimensionnement selon preset)")
+            except Exception as e:
+                print(f"Erreur lors du chargement des sprites: {e}")
+                cls.sprites = {}
+                cls.sprites_loaded = True
+    
+    def __init__(self, x, y, config, is_special=False, wave_number=1):
+        # Charger les sprites si ce n'est pas déjà fait
+        if not Enemy.sprites_loaded:
+            Enemy.load_sprites()
+        
+        self.x = x
+        self.y = y
+        self.config = config
+        self.size = config.ENEMY_SIZE
+        self.speed = config.ENEMY_SPEED
+        
+        # Choisir un sprite aléatoire pour cet ennemi et le redimensionner à la bonne taille
+        if Enemy.sprites:
+            self.sprite_id = random.choice(list(Enemy.sprites.keys()))
+            # Redimensionner le sprite original à la taille définie dans le preset avec antialiasing
+            original_sprite = Enemy.sprites[self.sprite_id]
+            if config.SPRITE_SMOOTHING:
+                self.sprite = pygame.transform.smoothscale(original_sprite, (self.size, self.size))
+            else:
+                self.sprite = pygame.transform.scale(original_sprite, (self.size, self.size))
+            # Optimiser le format pour un rendu plus rapide
+            self.sprite = self.sprite.convert_alpha()
+        else:
+            self.sprite_id = None
+            self.sprite = None
+        
+        # Calcul des points de vie selon la vague et le type d'ennemi
+        base_health = config.ENEMY_HEALTH
+        wave_bonus = (wave_number - 1)  # Vague 1 = +0, Vague 2 = +1, etc.
+        
+        # Ennemi spécial
+        self.is_special = is_special
+        if is_special:
+            # Points de vie spéciaux avec progression par vague
+            special_wave_bonus = wave_bonus * config.SPECIAL_ENEMY_HEALTH_INCREASE_PER_WAVE
+            self.max_health = int((base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE) * config.SPECIAL_ENEMY_HEALTH_MULTIPLIER + special_wave_bonus)
+            self.bonus_type = random.choice(config.BONUS_TYPES)
+            # Taille x2 pour les ennemis spéciaux
+            self.size = config.ENEMY_SIZE * 2
+            # Redimensionner le sprite à la nouvelle taille avec antialiasing
+            if self.sprite:
+                if config.SPRITE_SMOOTHING:
+                    self.sprite = pygame.transform.smoothscale(Enemy.sprites[self.sprite_id], (self.size, self.size))
+                else:
+                    self.sprite = pygame.transform.scale(Enemy.sprites[self.sprite_id], (self.size, self.size))
+                # Optimiser le format
+                self.sprite = self.sprite.convert_alpha()
+        else:
+            # Points de vie normaux avec progression par vague
+            self.max_health = base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE
+            self.bonus_type = None
+            
+        self.health = self.max_health
+        
+        # Animation de rotation (ping-pong de -5° à +5° accéléré)
+        self.rotation_angle = 0
+        self.rotation_time = 0
+        self.rotation_speed = 5  # Vitesse de rotation accélérée (20 au lieu de 10)
+        
+        # Composante aléatoire pour l'IA
+        self.random_offset_x = 0
+        self.random_offset_y = 0
+        self.random_timer = 0
+    
+    def update(self, player_x, player_y):
+        """Met à jour la position de l'ennemi (suit le joueur)"""
+        # Mise à jour de l'animation de rotation accélérée avec rotation_speed
+        dt = 1.0 / 60.0  # Delta time assumant 60 FPS
+        self.rotation_time += dt * self.rotation_speed  # Utiliser rotation_speed pour accélérer
+        
+        # Calculer l'angle de rotation en ping-pong (-5° à +5°)
+        # La vitesse est maintenant contrôlée par rotation_speed
+        self.rotation_angle = 5 * math.sin(self.rotation_time * math.pi)
+        
+        # Mise à jour du mouvement aléatoire
+        self.random_timer += 1
+        if self.random_timer >= 30:  # Change de direction toutes les 0.5 secondes
+            self.random_offset_x = random.uniform(-0.5, 0.5)
+            self.random_offset_y = random.uniform(-0.5, 0.5)
+            self.random_timer = 0
+        
+        # Direction vers le joueur
+        dx = player_x - (self.x + self.size//2)
+        dy = player_y - (self.y + self.size//2)
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance > 0:
+            # Normaliser et ajouter composante aléatoire
+            dx = (dx / distance) + self.random_offset_x
+            dy = (dy / distance) + self.random_offset_y
+            # Normalisation pour vitesse constante
+            norm = math.sqrt(dx**2 + dy**2)
+            if norm > 0:
+                dx = dx / norm
+                dy = dy / norm
+            # Appliquer le facteur de correction pour équilibrer avec le système d'accélération du joueur
+            corrected_speed = self.speed * self.config.ENEMY_SPEED_CORRECTION_FACTOR
+            # Déplacer l'ennemi
+            self.x += dx * corrected_speed
+            self.y += dy * corrected_speed
+    
+    def take_damage(self, damage):
+        """Fait subir des dégâts à l'ennemi"""
+        self.health = max(0, self.health - damage)
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine l'ennemi avec animation de rotation"""
+        if self.sprite:
+            # Appliquer la rotation au sprite
+            rotated_sprite = pygame.transform.rotate(self.sprite, self.rotation_angle)
+            
+            # Calculer la nouvelle position pour centrer le sprite tourné
+            rotated_rect = rotated_sprite.get_rect()
+            sprite_center_x = self.x + self.size // 2
+            sprite_center_y = self.y + self.size // 2
+            rotated_rect.center = (sprite_center_x, sprite_center_y)
+            
+            # Dessiner le sprite tourné
+            screen.blit(rotated_sprite, rotated_rect)
+        else:
+            # Fallback : dessiner des carrés colorés si les sprites ne sont pas chargés
+            enemy_color = self.config.ENEMY_COLOR  # Couleur normale pour tous les ennemis
+            
+            # Corps principal avec antialiasing si activé
+            if self.config.ENABLE_ANTIALIASING:
+                # Utiliser un rectangle avec antialiasing (approximation avec gfxdraw)
+                points = [
+                    (int(self.x), int(self.y)),
+                    (int(self.x + self.size), int(self.y)),
+                    (int(self.x + self.size), int(self.y + self.size)),
+                    (int(self.x), int(self.y + self.size))
+                ]
+                pygame.gfxdraw.filled_polygon(screen, points, enemy_color)
+                pygame.gfxdraw.aapolygon(screen, points, enemy_color)
+                
+                # Contour blanc avec antialiasing (plus épais pour les ennemis spéciaux)
+                border_width = 3 if self.is_special else 2
+                for i in range(border_width):
+                    border_points = [
+                        (int(self.x - i), int(self.y - i)),
+                        (int(self.x + self.size + i), int(self.y - i)),
+                        (int(self.x + self.size + i), int(self.y + self.size + i)),
+                        (int(self.x - i), int(self.y + self.size + i))
+                    ]
+                    pygame.gfxdraw.aapolygon(screen, border_points, self.config.WHITE)
+            else:
+                # Rendu normal sans antialiasing
+                pygame.draw.rect(screen, enemy_color,
+                                (int(self.x), int(self.y), self.size, self.size))
+                
+                # Contour blanc (plus épais pour les ennemis spéciaux)
+                border_width = 3 if self.is_special else 2
+                pygame.draw.rect(screen, self.config.WHITE,
+                                (int(self.x), int(self.y), self.size, self.size), border_width)
+            
+            # Effet scintillant pour les ennemis spéciaux (inchangé)
+            if self.is_special:
+                pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
+                glow_color = (255, 255, 255, pulse)
+                glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
+                if self.config.ENABLE_ANTIALIASING:
+                    # Contour avec antialiasing pour l'effet de scintillement
+                    glow_points = [
+                        (int(self.x - 2), int(self.y - 2)),
+                        (int(self.x + self.size + 2), int(self.y - 2)),
+                        (int(self.x + self.size + 2), int(self.y + self.size + 2)),
+                        (int(self.x - 2), int(self.y + self.size + 2))
+                    ]
+                    pygame.gfxdraw.aapolygon(screen, glow_points, self.config.WHITE)
+                else:
+                    pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
+        
+        # Barre de santé si endommagé (au-dessus du sprite)
+        if self.health < self.max_health:
+            health_ratio = self.health / self.max_health
+            bar_width = self.size
+            bar_height = 4
+            
+            # Fond rouge
+            pygame.draw.rect(screen, self.config.RED,
+                           (int(self.x), int(self.y - 8), bar_width, bar_height))
+            
+            # Santé actuelle
+            current_width = int(bar_width * health_ratio)
+            pygame.draw.rect(screen, self.config.GREEN,
+                           (int(self.x), int(self.y - 8), current_width, bar_height))
+
+
 class Zap:
     """Classe des projectiles électriques"""
     
@@ -1204,3 +1419,110 @@ class DeathEffect:
             temp_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
             pygame.draw.circle(temp_surface, color, (radius, radius), radius)
             screen.blit(temp_surface, (screen_x - radius, screen_y - radius))
+
+
+class Collectible:
+    """Classe de base pour les objets collectibles"""
+    
+    def __init__(self, x, y, config):
+        self.x = x
+        self.y = y
+        self.config = config
+        self.is_collected = False
+        self.attraction_started = False
+        self.vel_x = 0
+        self.vel_y = 0
+    
+    def update(self, player_x, player_y):
+        """Met à jour l'objet collectible (attraction vers le joueur)"""
+        # Calculer la distance au joueur
+        dx = player_x - self.x
+        dy = player_y - self.y
+        distance = math.sqrt(dx*dx + dy*dy)
+        
+        # Si le joueur est assez proche, attirer l'objet
+        if distance <= self.config.COLLECTIBLE_PICKUP_DISTANCE:
+            if not self.attraction_started:
+                self.attraction_started = True
+            
+            # Calculer la direction vers le joueur
+            if distance > 5:  # Éviter la division par zéro
+                direction_x = dx / distance
+                direction_y = dy / distance
+                
+                # Appliquer la vitesse d'attraction
+                self.vel_x = direction_x * self.config.COLLECTIBLE_ATTRACTION_SPEED
+                self.vel_y = direction_y * self.config.COLLECTIBLE_ATTRACTION_SPEED
+                
+                # Mettre à jour la position
+                self.x += self.vel_x
+                self.y += self.vel_y
+            else:
+                # Collecté ! 
+                self.is_collected = True
+    
+    def draw(self, screen, camera_x, camera_y):
+        """Dessine l'objet collectible (à redéfinir dans les sous-classes)"""
+        pass
+    
+    def on_collect(self, player):
+        """Effet appliqué au joueur lors de la collecte (à redéfinir dans les sous-classes)"""
+        pass
+
+
+class Heart(Collectible):
+    """Objet collectible coeur qui restaure la vie"""
+    
+    def __init__(self, x, y, config):
+        super().__init__(x, y, config)
+        self.size = 24  # Taille du coeur
+        self.pulse_timer = 0
+        self.pulse_scale = 1.0
+        
+        # Charger le sprite du coeur
+        try:
+            self.image = pygame.image.load("assets/drops/heart.png").convert_alpha()
+            # Redimensionner le coeur
+            self.image = pygame.transform.scale(self.image, (self.size, self.size))
+            self.has_image = True
+        except (pygame.error, FileNotFoundError):
+            print("Image assets/drops/heart.png non trouvée, utilisation du rendu par défaut")
+            self.has_image = False
+    
+    def update(self, player_x, player_y):
+        """Met à jour le coeur avec animation de pulsation"""
+        super().update(player_x, player_y)
+        
+        # Animation de pulsation
+        self.pulse_timer += 1
+        self.pulse_scale = 1.0 + 0.1 * math.sin(self.pulse_timer * 0.1)
+    
+    def draw(self, screen, camera_x, camera_y):
+        """Dessine le coeur avec l'offset de caméra"""
+        screen_x = int(self.x - camera_x)
+        screen_y = int(self.y - camera_y)
+        
+        if self.has_image:
+            # Appliquer l'effet de pulsation
+            scaled_size = int(self.size * self.pulse_scale)
+            scaled_image = pygame.transform.scale(self.image, (scaled_size, scaled_size))
+            
+            # Centrer l'image
+            image_rect = scaled_image.get_rect()
+            image_rect.center = (screen_x, screen_y)
+            screen.blit(scaled_image, image_rect)
+        else:
+            # Rendu par défaut : coeur rouge
+            scaled_size = int(self.size * self.pulse_scale)
+            pygame.draw.circle(screen, (255, 0, 0), (screen_x, screen_y), scaled_size // 2)
+            pygame.draw.circle(screen, (255, 100, 100), (screen_x, screen_y), scaled_size // 4)
+    
+    def on_collect(self, player):
+        """Restaure la vie du joueur"""
+        old_health = player.health
+        player.health = min(player.max_health, player.health + self.config.HEART_HEAL_AMOUNT)
+        healed = player.health - old_health
+        if healed > 0:
+            print(f"💚 Coeur collecté ! +{healed} points de vie (vie: {player.health}/{player.max_health})")
+        else:
+            print(f"💚 Coeur collecté mais vie déjà au maximum ({player.health}/{player.max_health})")
