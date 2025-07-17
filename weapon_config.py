@@ -27,12 +27,12 @@ class WeaponConfig:
     LIGHTNING = {
         "name": "Lightning",
         "max_level": 10,
-        "base_damage": 50,
-        "base_fire_rate": 300,  # frames entre les tirs (5 secondes)
+        "base_damage": 150,  # Triplé de 50 à 150
+        "base_fire_rate": 120,  # frames entre les tirs (2 secondes)
         "base_range": 384,
         "chain_range": 256,
         "base_chain_count": 1,
-        "display_time": 6,  # frames d'affichage
+        "display_time": 12,  # Doublé de 6 à 12 frames (0.2s à 60 FPS)
         
         # Progressions par niveau
         "damage_progression": [1.0, 1.3, 1.69, 2.20, 2.86, 3.72, 4.84, 6.29, 8.18, 10.63],
@@ -63,15 +63,20 @@ class WeaponConfig:
         "max_level": 10,
         "base_damage": 15,  # Dégâts par frame (continu)
         "base_fire_rate": 120,  # frames entre les activations (2 secondes)
-        "base_range": 500,
+        "base_range": 750,
         "base_width": 12,  # Largeur du faisceau en pixels
-        "beam_duration": 60,  # Durée du faisceau en frames (1 seconde)
+        "base_duration": 60,  # Durée du faisceau en frames (1 seconde)
+        "base_rotation_angle": 30,  # Rotation initiale en degrés (niveau 1)
         
         # Progressions par niveau
         "damage_progression": [1.0, 1.25, 1.56, 1.95, 2.44, 3.05, 3.81, 4.76, 5.95, 7.44],
         "fire_rate_progression": [1.0, 0.9, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39],  # Plus bas = plus rapide
         "range_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
-        "width_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]
+        "width_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
+        
+        # Nouvelles progressions pour la rotation
+        "duration_progression": [60, 75, 90, 105, 120, 135, 150, 165, 180, 180],  # De 1s à 3s au niveau 10
+        "rotation_progression": [30, 45, 60, 90, 120, 180, 240, 270, 320, 360]  # De 30° à 360° (tour complet)
     }
 
 
@@ -199,8 +204,8 @@ def get_weapon_stat(weapon_name, stat_name, level):
     Récupère une statistique d'arme pour un niveau donné
     
     Args:
-        weapon_name: Nom de l'arme ("Canon", "Lightning", "Orb")
-        stat_name: Nom de la statistique ("damage", "fire_rate", etc.)
+        weapon_name: Nom de l'arme ("Canon", "Lightning", "Orb", "Beam")
+        stat_name: Nom de la statistique ("damage", "fire_rate", "duration", "rotation", etc.)
         level: Niveau de l'arme (1-max_level)
     
     Returns:
@@ -210,8 +215,20 @@ def get_weapon_stat(weapon_name, stat_name, level):
     if not weapon_config:
         return 0
     
+    # Gestion spéciale pour les nouvelles stats du Beam
+    if weapon_name.upper() == "BEAM":
+        if stat_name == "duration":
+            progression = weapon_config.get("duration_progression", [60] * 10)
+            index = min(level - 1, len(progression) - 1)
+            return progression[index] if index >= 0 else 60
+        elif stat_name == "rotation":
+            progression = weapon_config.get("rotation_progression", [30] * 10)
+            index = min(level - 1, len(progression) - 1)
+            return progression[index] if index >= 0 else 30
+    
     # Valeur de base
-    base_value = weapon_config.get(f"base_{stat_name}", 0)
+    base_key = f"base_{stat_name}"
+    base_value = weapon_config.get(base_key, 0)
     
     # Progression
     progression_key = f"{stat_name}_progression"

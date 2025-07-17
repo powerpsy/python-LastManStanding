@@ -20,6 +20,9 @@ def main():
     # None = Détection automatique selon l'écran
     screen_size = 3  # Test en 1440p pour ajustements
     
+    # Mode test "Always Skip" - pour tester rapidement le système
+    test_always_skip = False  # Mettre True pour tester
+    
     try:
         # Initialise Pygame
         pygame.init()
@@ -27,6 +30,15 @@ def main():
         # Crée et lance une nouvelle partie
         config = Config(forced_screen_size=screen_size)
         game = Game(config)
+        
+        # Si mode test activé, simuler une situation où toutes les upgrades sont au max
+        if test_always_skip:
+            print("🧪 MODE TEST ALWAYS SKIP ACTIVÉ")
+            # Simuler qu'on a atteint tous les niveaux max (simplifié)
+            game.level = 50  # Niveau élevé
+            # Cette ligne sera décommentée pour le test réel
+            # game.upgrade_options = []  # Pas d'options disponibles
+        
         game.run()
         
     except KeyboardInterrupt:

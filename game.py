@@ -2,7 +2,7 @@ import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, EnergyOrb, BonusManager, Beam
+from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect
 from background import Background
 from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, ShieldSkill, RegenSkill
 
@@ -49,7 +49,9 @@ class Game:
         self.lightnings = []  # Nouvelle liste pour les éclairs
         self.beams = []       # Nouvelle liste pour les rayons laser
         self.particles = []   # Nouvelle liste pour les particules
+        self.welding_particles = []  # Nouvelle liste pour les particules de soudure du Beam
         self.energy_orbs = []  # Nouvelle liste pour les boules d'énergie
+        self.death_effects = []  # Nouvelle liste pour les effets de mort
         
         # Gestion des vagues d'ennemis
         self.wave_number = 1
@@ -81,6 +83,8 @@ class Game:
         self.show_upgrade_screen = False
         self.ban_mode = False
         self.upgrade_options = []
+        self.banned_upgrades = []  # Liste des upgrades bannis pour cette partie
+        self.always_skip_mode = False  # Mode "Always Skip" activé
         self.roll_count = 3
         self.ban_count = 3
         
@@ -112,17 +116,19 @@ class Game:
             if self.show_upgrade_screen:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mx, my = pygame.mouse.get_pos()
-                    # Boutons (agrandis)
+                    # Boutons (agrandis) - synchronisé avec draw_upgrade_screen
                     btn_w, btn_h = 180, 72  # Agrandis pour correspondre à draw_upgrade_screen
                     screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
-                    btn_y = screen_h//2 + 120
-                    roll_rect = pygame.Rect(screen_w//2-300, btn_y, btn_w, btn_h)  # Position ajustée
-                    ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)   # Position ajustée
-                    skip_rect = pygame.Rect(screen_w//2+120, btn_y, btn_w, btn_h)  # Position ajustée
+                    overlay_y = (screen_h - int(screen_h*0.75)) // 2  # Position de l'overlay
+                    btn_y = overlay_y + 30  # Même position que dans draw_upgrade_screen
+                    # Positions centrées par rapport aux upgrades
+                    roll_rect = pygame.Rect(screen_w//2-270, btn_y, btn_w, btn_h)  # Recentré
+                    ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)   # Centre
+                    skip_rect = pygame.Rect(screen_w//2+90, btn_y, btn_w, btn_h)  # Recentré
                     
-                    # Sélection d'une option d'upgrade (clic sur les options)
+                    # Sélection d'une option d'upgrade (clic sur les cadres englobants)
                     if not self.ban_mode:
-                        for i, rect in enumerate(self.get_upgrade_option_rects()):
+                        for i, rect in enumerate(self.get_upgrade_combined_rects()):
                             if rect.collidepoint(mx, my):
                                 # Appliquer l'upgrade sélectionné
                                 selected_upgrade = self.upgrade_options[i]
@@ -134,12 +140,12 @@ class Game:
                                 self.ban_mode = False
                                 return
                     
-                    # ROLL
-                    if roll_rect.collidepoint(mx, my) and self.roll_count > 0 and not self.ban_mode:
+                    # ROLL (seulement si des options sont disponibles)
+                    if roll_rect.collidepoint(mx, my) and self.roll_count > 0 and not self.ban_mode and len(self.upgrade_options) > 0:
                         self.upgrade_options = self.get_smart_upgrade_options()
                         self.roll_count -= 1
-                    # BAN
-                    elif ban_rect.collidepoint(mx, my) and self.ban_count > 0 and not self.ban_mode:
+                    # BAN (seulement si des options sont disponibles)
+                    elif ban_rect.collidepoint(mx, my) and self.ban_count > 0 and not self.ban_mode and len(self.upgrade_options) > 0:
                         self.ban_mode = True
                         # Changer le background à la prochaine draw
                     # SKIP
@@ -147,13 +153,42 @@ class Game:
                         self.show_upgrade_screen = False
                         self.paused = False
                         self.ban_mode = False
-                    # Sélection d'une option en mode BAN
+                    # ALWAYS SKIP (seulement si aucune option disponible)
+                    elif len(self.upgrade_options) == 0:
+                        # Définir le rect du bouton Always Skip
+                        always_skip_rect = pygame.Rect(screen_w//2+270, btn_y, btn_w, btn_h)
+                        if always_skip_rect.collidepoint(mx, my):
+                            print("🚀 Mode 'Always Skip' activé ! Plus d'écrans d'upgrade jusqu'à la fin de la partie.")
+                            self.always_skip_mode = True
+                            self.show_upgrade_screen = False
+                            self.paused = False
+                            self.ban_mode = False
+                    # Sélection d'une option en mode BAN (clic sur les cadres englobants)
                     elif self.ban_mode:
-                        for i, rect in enumerate(self.get_upgrade_option_rects()):
+                        for i, rect in enumerate(self.get_upgrade_combined_rects()):
                             if rect.collidepoint(mx, my):
-                                self.upgrade_options.pop(i)
-                                self.ban_count -= 1
-                                self.ban_mode = False
+                                # Vérifier qu'il y a assez d'options avant de pop
+                                if i < len(self.upgrade_options) and len(self.upgrade_options) > 0:
+                                    # Ajouter l'option à la liste des bannis persistants
+                                    banned_option = self.upgrade_options[i]
+                                    self.banned_upgrades.append(banned_option["name"])
+                                    print(f"🚫 Option bannie définitivement: {banned_option['name']}")
+                                    
+                                    # Retirer l'option de la liste actuelle
+                                    self.upgrade_options.pop(i)
+                                    self.ban_count -= 1
+                                    self.ban_mode = False
+                                    # Régénérer les options si la liste devient vide
+                                    if len(self.upgrade_options) == 0:
+                                        self.upgrade_options = self.get_smart_upgrade_options()
+                                        # Si toujours vide, désactiver l'écran d'upgrade
+                                        if len(self.upgrade_options) == 0:
+                                            print("Plus d'options d'upgrade disponibles !")
+                                            self.show_upgrade_screen = False
+                                            self.paused = False
+                                else:
+                                    print("Erreur: Index d'option invalide pour BAN")
+                                    self.ban_mode = False
                                 break
                 return
             
@@ -288,10 +323,31 @@ class Game:
                     weapon.fire(self.player, self.enemies, self.zaps, self.config)
                 elif weapon.name == "Lightning":
                     hit_positions = weapon.fire(self.player, self.enemies, self.lightnings, self.config)
-                    # Créer des effets d'explosion pour chaque ennemi touché
+                    # Créer des effets d'explosion renforcés pour chaque ennemi touché par Lightning
                     if hit_positions:
                         for x, y in hit_positions:
-                            self.create_explosion_particles(x, y)
+                            self.create_lightning_explosion_particles(x, y)
+                    
+                    # Supprimer les ennemis morts après l'attaque Lightning
+                    enemies_to_remove = []
+                    for enemy in self.enemies:
+                        if enemy.health <= 0:
+                            # Créer effet de mort pour les ennemis spéciaux
+                            if enemy.is_special:
+                                death_effect = DeathEffect(enemy.x, enemy.y, self.config)
+                                self.death_effects.append(death_effect)
+                            
+                            # Appliquer bonus si c'est un ennemi spécial
+                            if enemy.is_special and enemy.bonus_type:
+                                self.bonus_manager.apply_bonus(enemy.bonus_type, self)
+                            enemies_to_remove.append(enemy)
+                            self.enemies_killed += 1
+                            self.score += self.config.SCORE_PER_LIGHTNING_KILL
+                    
+                    # Supprimer les ennemis morts de la liste
+                    for enemy in enemies_to_remove:
+                        if enemy in self.enemies:  # Vérification de sécurité
+                            self.enemies.remove(enemy)
                 elif weapon.name == "Beam":
                     weapon.fire(self.player, self.enemies, self.beams, self.config)
                 elif weapon.name == "Orb":
@@ -533,6 +589,11 @@ class Game:
                                           enemy.y + enemy.size // 2)
             
             if enemy.health <= 0:
+                # Créer effet de mort pour les ennemis spéciaux
+                if enemy.is_special:
+                    death_effect = DeathEffect(enemy.x, enemy.y, self.config)
+                    self.death_effects.append(death_effect)
+                
                 # Appliquer bonus si c'est un ennemi spécial
                 if enemy.is_special and enemy.bonus_type:
                     self.bonus_manager.apply_bonus(enemy.bonus_type, self)
@@ -547,6 +608,61 @@ class Game:
         """Crée des particules d'explosion à la position donnée"""
         for _ in range(self.config.PARTICLE_COUNT):
             particle = Particle(x, y, self.config)
+            self.particles.append(particle)
+    
+    def create_lightning_explosion_particles(self, x, y):
+        """Crée une explosion renforcée spécifique au Lightning (3x plus de particules)"""
+        # Triple le nombre de particules pour un effet spectaculaire
+        for _ in range(self.config.PARTICLE_COUNT * 3):
+            particle = Particle(x, y, self.config)
+            # Modifier les propriétés pour un effet plus électrique
+            particle.vel_x *= random.uniform(1.2, 2.0)  # Plus de vitesse
+            particle.vel_y *= random.uniform(1.2, 2.0)
+            particle.color = random.choice([
+                (255, 255, 255),  # Blanc électrique
+                (200, 200, 255),  # Bleu clair
+                (255, 255, 200),  # Jaune électrique
+                (150, 150, 255)   # Bleu électrique
+            ])
+            particle.lifetime = int(particle.lifetime * random.uniform(1.2, 1.8))  # Durée plus longue
+            particle.current_life = particle.lifetime
+            self.particles.append(particle)
+    
+    def create_welding_particles(self, x, y, beam_direction_x=None, beam_direction_y=None):
+        """Crée des particules de soudure au point d'impact du Beam"""
+        # Nombre réduit de particules pour un effet plus réaliste
+        base_count = max(4, self.config.PARTICLE_COUNT // 2)  # Réduits de moitié
+        particle_count = base_count  # Plus de doublement
+        
+        for _ in range(particle_count):
+            particle = WeldingParticle(x, y, self.config, beam_direction_x, beam_direction_y)
+            self.welding_particles.append(particle)
+        
+        # Quelques particules supplémentaires ultra-brillantes (réduites)
+        for _ in range(max(1, particle_count // 4)):  # Beaucoup moins de particules bonus
+            particle = WeldingParticle(x, y, self.config, beam_direction_x, beam_direction_y)
+            # Rendre ces particules encore plus brillantes mais plus petites
+            particle.color = (255, 255, 255)  # Blanc pur
+            particle.size = 1  # Très petites
+            particle.lifetime = random.randint(15, 30)  # Durée normale
+            particle.current_life = particle.lifetime
+            self.welding_particles.append(particle)
+    
+    def create_beam_explosion_particles(self, x, y):
+        """Crée une explosion renforcée quand un ennemi est tué par un Beam (x2 particules)"""
+        # Explosion normale
+        for _ in range(self.config.PARTICLE_COUNT):
+            particle = Particle(x, y, self.config)
+            self.particles.append(particle)
+        
+        # Explosion supplémentaire (double effet)
+        for _ in range(self.config.PARTICLE_COUNT):
+            particle = Particle(x, y, self.config)
+            # Modifier légèrement les propriétés pour plus de variété
+            particle.vel_x *= random.uniform(0.8, 1.4)
+            particle.vel_y *= random.uniform(0.8, 1.4)
+            particle.lifetime = int(particle.lifetime * random.uniform(0.8, 1.3))
+            particle.current_life = particle.lifetime
             self.particles.append(particle)
     
     def check_collision(self, obj1, obj2):
@@ -679,32 +795,32 @@ class Game:
         
         wave_text = f"Vague {self.wave_number} - Ennemis: {len(self.enemies)}"
         wave_surface = self.font.render(wave_text, True, self.config.WHITE)
-        self.screen.blit(wave_surface, (10, 60))
+        self.screen.blit(wave_surface, (30, 60))
         
         # Afficher les armes du joueur (sans caractères spéciaux, avec espacement)
         weapons_text = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
         weapons_surface = self.small_font.render(weapons_text, True, self.config.CYAN)
-        self.screen.blit(weapons_surface, (10, 85))
+        self.screen.blit(weapons_surface, (30, 100))  # Plus d'espace après la vague
         
-        y_offset = 105  # Espacement augmenté
+        y_offset = 130  # Espacement augmenté pour éviter superposition
         for weapon in self.weapon_manager.weapons:
             weapon_text = f"  {weapon.name} Niv.{weapon.level}"
             weapon_surface = self.small_font.render(weapon_text, True, self.config.WHITE)
-            self.screen.blit(weapon_surface, (10, y_offset))
-            y_offset += 40  # Espacement doublé de 20 à 40
+            self.screen.blit(weapon_surface, (50, y_offset))
+            y_offset += 50  # Espacement augmenté de 40 à 50
         
         # Afficher les compétences du joueur (sans caractères spéciaux, avec espacement)
-        y_offset += 20  # Espacement avant section augmenté
+        y_offset += 30  # Plus d'espacement avant section compétences
         skills_text = f"COMPETENCES ({len(self.skill_manager.skills)}/14):"
         skills_surface = self.small_font.render(skills_text, True, self.config.PURPLE)
-        self.screen.blit(skills_surface, (10, y_offset))
-        y_offset += 40  # Espacement doublé de 20 à 40
+        self.screen.blit(skills_surface, (30, y_offset))
+        y_offset += 50  # Plus d'espacement après titre section
         
         for skill in self.skill_manager.skills:
             skill_text = f"  {skill.name} Niv.{skill.level}"
             skill_surface = self.small_font.render(skill_text, True, self.config.WHITE)
-            self.screen.blit(skill_surface, (10, y_offset))
-            y_offset += 40  # Espacement doublé de 20 à 40
+            self.screen.blit(skill_surface, (50, y_offset))
+            y_offset += 50  # Espacement augmenté de 40 à 50
         
         # Score
         score_text = f"Score: {self.score}"
@@ -713,20 +829,28 @@ class Game:
         score_rect.topright = (self.config.WINDOW_WIDTH - 10, 10)
         self.screen.blit(score_surface, score_rect)
         
+        # Indicateur "Always Skip" si activé
+        if self.always_skip_mode:
+            always_skip_text = "🚀 ALWAYS SKIP ACTIF"
+            always_skip_surface = self.font.render(always_skip_text, True, (100, 255, 100))
+            always_skip_rect = always_skip_surface.get_rect()
+            always_skip_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
+            self.screen.blit(always_skip_surface, always_skip_rect)
+        
         # Afficher les bonus actifs
-        y_offset += 20
+        y_offset += 30  # Plus d'espacement avant section bonus
         for bonus_type, frames_left in self.bonus_manager.active_bonuses.items():
             seconds_left = frames_left / 60
             bonus_text = f"{bonus_type.replace('_', ' ').title()}: {seconds_left:.1f}s"
             bonus_surface = self.small_font.render(bonus_text, True, self.config.YELLOW)
-            self.screen.blit(bonus_surface, (10, y_offset))
-            y_offset += 40  # Espacement doublé de 20 à 40
+            self.screen.blit(bonus_surface, (30, y_offset))
+            y_offset += 50  # Espacement augmenté de 40 à 50
         
         # Afficher le bouclier s'il est actif
         if self.bonus_manager.shield_hits_remaining > 0:
-            shield_text = f"🛡️ Bouclier: {self.bonus_manager.shield_hits_remaining} coups"
+            shield_text = f"Bouclier: {self.bonus_manager.shield_hits_remaining} coups"
             shield_surface = self.small_font.render(shield_text, True, self.config.CYAN)
-            self.screen.blit(shield_surface, (10, y_offset))
+            self.screen.blit(shield_surface, (30, y_offset))
     
     def draw_pause_screen(self):
         """Dessine l'écran de pause"""
@@ -906,7 +1030,9 @@ class Game:
         self.lightnings.clear()  # Nouveau
         self.beams.clear()       # Nouveau
         self.particles.clear()   # Nouveau
+        self.welding_particles.clear()  # Nouveau
         self.energy_orbs.clear()  # Nouveau
+        self.death_effects.clear()  # Nouveau - pour les effets de mort
         
         # Créer les orb initiales
         self.recreate_all_energy_orbs()
@@ -1100,21 +1226,86 @@ class Game:
     
     def trigger_upgrade_screen(self):
         """Affiche l'écran de choix d'upgrade à la montée de niveau"""
+        # Si le mode "Always Skip" est activé, passer directement
+        if self.always_skip_mode:
+            print("🚀 Always Skip activé - Level up automatique avec bonus XP")
+            self.score += 1000  # Bonus de score
+            return
+        
+        self.upgrade_options = self.get_smart_upgrade_options()
+        
+        # Toujours afficher l'écran, même s'il n'y a pas d'options
+        # Si pas d'options, on proposera le bouton "Always Skip"
         self.show_upgrade_screen = True
         self.paused = True
         self.paused_skills = False
         self.ban_mode = False
-        self.upgrade_options = self.get_smart_upgrade_options()
     
     def get_upgrade_option_rects(self):
         # Retourne les rects des 3 options pour la détection (boutons agrandis x2)
         screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
         opt_w, opt_h = 440, 128  # Agrandis x2 : 220->440, 64->128
-        y = screen_h//2 - 80
+        y = screen_h//2 + 320  # Déplacé encore plus bas pour les icônes carrées
         return [pygame.Rect(screen_w//2-660+i*480, y, opt_w, opt_h) for i in range(3)]
+    
+    def get_upgrade_icon_rects(self):
+        # Retourne les rects des 3 cadres d'icônes au-dessus des boutons
+        screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
+        icon_size = 440  # Icônes carrées de la largeur des boutons
+        y = screen_h//2 - 160  # Ajusté pour la nouvelle hauteur
+        return [pygame.Rect(screen_w//2-660+i*480, y, icon_size, icon_size) for i in range(3)]
+    
+    def load_upgrade_icon(self, option):
+        """Charge l'icône appropriée pour une option d'upgrade"""
+        try:
+            name = option["name"]
+            
+            # Extraire le nom de l'arme/compétence
+            if "|" in name:
+                lines = name.split("|")
+                item_name = lines[1].strip().lower()  # Deuxième partie (nom de l'item)
+                
+                # Nettoyer le nom (enlever "niv.X" pour les améliorations)
+                if " niv." in item_name:
+                    item_name = item_name.split(" niv.")[0]
+                
+                # Déterminer le dossier selon le type
+                if "débloquer" in lines[0].lower():
+                    # Nouvelle arme
+                    folder = "weapons"
+                elif "compétence" in lines[0].lower():
+                    # Compétence
+                    folder = "competences"
+                elif "améliorer" in lines[0].lower():
+                    # Amélioration - déterminer si c'est arme ou compétence
+                    if item_name in ["canon", "lightning", "orb", "beam"]:
+                        folder = "weapons"
+                    else:
+                        folder = "competences"
+                else:
+                    return None
+                
+                # Charger l'image
+                image_path = f"assets/{folder}/{item_name}.png"
+                image = pygame.image.load(image_path).convert_alpha()
+                return image
+                
+        except (pygame.error, FileNotFoundError, IndexError):
+            # Image non trouvée ou erreur de parsing
+            return None
+        
+        return None
     
     def draw_upgrade_screen(self):
         """Affiche l'écran de choix d'upgrade"""
+        # Vérification de sécurité : si pas d'options, fermer l'écran
+        if len(self.upgrade_options) == 0:
+            print("Aucune option d'upgrade disponible, fermeture de l'écran")
+            self.show_upgrade_screen = False
+            self.paused = False
+            self.ban_mode = False
+            return
+        
         screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
         overlay = pygame.Surface((int(screen_w*0.75), int(screen_h*0.75)))
         overlay.fill((60, 60, 80) if not self.ban_mode else (80, 20, 20))
@@ -1122,14 +1313,76 @@ class Game:
         overlay_x = (screen_w - overlay.get_width()) // 2
         overlay_y = (screen_h - overlay.get_height()) // 2
         self.screen.blit(overlay, (overlay_x, overlay_y))
-        # Titre (sans caractères spéciaux)
-        title = "Choisissez une amelioration" if not self.ban_mode else "Bannissez une option"
-        title_surface = self.font.render(title, True, self.config.WHITE)
-        title_rect = title_surface.get_rect(center=(screen_w//2, overlay_y+60))
-        self.screen.blit(title_surface, title_rect)
-        # Options (boutons agrandis avec texte adapté)
+        
+        # Dessiner les cadres englobants cliquables pour chaque compétence
+        combined_rects = self.get_upgrade_combined_rects()
+        icon_rects = self.get_upgrade_icon_rects()
+        option_rects = self.get_upgrade_option_rects()
+        
+        # Options (cadres englobants avec icônes et boutons)
         for i, option in enumerate(self.upgrade_options):
-            rect = self.get_upgrade_option_rects()[i]
+            # === CADRE ENGLOBANT CLIQUABLE ===
+            combined_rect = combined_rects[i]
+            
+            # Dessiner le cadre principal (zone cliquable)
+            frame_color = (220, 220, 220) if not option.get("is_new_weapon", False) else (255, 215, 0)
+            pygame.draw.rect(self.screen, frame_color, combined_rect, 2, border_radius=15)
+            
+            # Fond semi-transparent pour tout le cadre
+            background_color = (240, 240, 240, 30) if not option.get("is_new_weapon", False) else (255, 240, 200, 30)
+            s = pygame.Surface((combined_rect.width, combined_rect.height))
+            s.set_alpha(30)
+            s.fill(background_color[:3])
+            self.screen.blit(s, combined_rect)
+            
+            # === CADRE D'ICÔNE ===
+            icon_rect = icon_rects[i]
+            
+            # Dessiner le cadre de l'icône
+            icon_frame_color = (200, 200, 200) if not option.get("is_new_weapon", False) else (255, 215, 0)
+            pygame.draw.rect(self.screen, icon_frame_color, icon_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (100, 100, 100), icon_rect, 3, border_radius=8)  # Bordure
+            
+            # Charger et afficher l'icône si disponible
+            icon_image = self.load_upgrade_icon(option)
+            if icon_image:
+                # Traitement de l'image pour la rendre carrée sans déformation
+                original_w, original_h = icon_image.get_size()
+                
+                # Calculer la taille du carré (la plus petite dimension)
+                square_size = min(original_w, original_h)
+                
+                # Calculer la position pour centrer le crop
+                crop_x = (original_w - square_size) // 2
+                crop_y = (original_h - square_size) // 2
+                
+                # Créer une surface carrée avec la partie centrale de l'image
+                square_surface = pygame.Surface((square_size, square_size))
+                source_rect = pygame.Rect(crop_x, crop_y, square_size, square_size)
+                square_surface.blit(icon_image, (0, 0), source_rect)
+                
+                # Redimensionner à la taille de l'icône carrée (avec marge)
+                icon_size = icon_rect.width - 20  # Marge de 10px de chaque côté
+                scaled_icon = pygame.transform.smoothscale(square_surface, (icon_size, icon_size))
+                
+                # Centrer l'image carrée dans le cadre carré
+                icon_x = icon_rect.centerx - icon_size // 2
+                icon_y = icon_rect.centery - icon_size // 2
+                self.screen.blit(scaled_icon, (icon_x, icon_y))
+            else:
+                # Pas d'image trouvée - afficher un placeholder
+                placeholder_color = (150, 150, 150)
+                placeholder_rect = pygame.Rect(icon_rect.x + 20, icon_rect.y + 20, 
+                                             icon_rect.width - 40, icon_rect.height - 40)
+                pygame.draw.rect(self.screen, placeholder_color, placeholder_rect, border_radius=4)
+                
+                # Texte "?" au centre
+                question_surface = self.font.render("?", True, (80, 80, 80))
+                question_rect = question_surface.get_rect(center=placeholder_rect.center)
+                self.screen.blit(question_surface, question_rect)
+            
+            # === BOUTON DE DESCRIPTION ===
+            rect = option_rects[i]
             
             # Couleur spéciale pour les nouvelles armes
             if option.get("is_new_weapon", False):
@@ -1140,61 +1393,81 @@ class Game:
                 
             pygame.draw.rect(self.screen, color, rect, border_radius=12)
             
-            # Texte adapté à la taille des boutons (police plus petite ou 2 lignes)
+            # Texte standardisé sur 2 lignes avec même police
             text_color = self.config.BLACK if not option.get("is_new_weapon", False) else (139, 69, 19)
             
-            # Diviser le texte en 2 lignes si trop long
+            # Séparer le texte par le caractère "|" pour 2 lignes uniformes
             name = option["name"]
-            if len(name) > 15:  # Si le texte est trop long
-                # Chercher un point de coupure naturel
-                words = name.split()
-                if len(words) > 1:
-                    mid = len(words) // 2
-                    line1 = " ".join(words[:mid])
-                    line2 = " ".join(words[mid:])
-                    
-                    # Afficher sur 2 lignes
-                    line1_surface = self.small_font.render(line1, True, text_color)
-                    line2_surface = self.small_font.render(line2, True, text_color)
-                    
-                    line1_rect = line1_surface.get_rect(center=(rect.centerx, rect.centery - 12))
-                    line2_rect = line2_surface.get_rect(center=(rect.centerx, rect.centery + 12))
-                    
-                    self.screen.blit(line1_surface, line1_rect)
-                    self.screen.blit(line2_surface, line2_rect)
-                else:
-                    # Une seule ligne avec police plus petite
-                    opt_surface = self.small_font.render(name, True, text_color)
-                    opt_rect = opt_surface.get_rect(center=rect.center)
-                    self.screen.blit(opt_surface, opt_rect)
+            if "|" in name:
+                lines = name.split("|")
+                line1 = lines[0].strip()
+                line2 = lines[1].strip()
             else:
-                # Texte court, police normale
-                opt_surface = self.font.render(name, True, text_color)
-                opt_rect = opt_surface.get_rect(center=rect.center)
-                self.screen.blit(opt_surface, opt_rect)
-        # Boutons ROLL, BAN, SKIP (agrandis)
+                # Fallback pour les anciens formats
+                if len(name) > 15:
+                    words = name.split()
+                    if len(words) > 1:
+                        mid = len(words) // 2
+                        line1 = " ".join(words[:mid])
+                        line2 = " ".join(words[mid:])
+                    else:
+                        line1 = name[:15]
+                        line2 = name[15:]
+                else:
+                    line1 = name
+                    line2 = ""
+            
+            # Affichage sur 2 lignes avec la même police (small_font pour uniformité)
+            line1_surface = self.small_font.render(line1, True, text_color)
+            line1_rect = line1_surface.get_rect(center=(rect.centerx, rect.centery - 18))
+            self.screen.blit(line1_surface, line1_rect)
+            
+            if line2:  # Afficher la deuxième ligne seulement si elle existe
+                line2_surface = self.small_font.render(line2, True, text_color)
+                line2_rect = line2_surface.get_rect(center=(rect.centerx, rect.centery + 18))
+                self.screen.blit(line2_surface, line2_rect)
+        
+        # Boutons ROLL, BAN, SKIP en haut de l'écran (recentrés)
         btn_w, btn_h = 180, 72  # Agrandis : 120->180, 48->72
-        btn_y = screen_h//2 + 120
-        # ROLL
-        roll_rect = pygame.Rect(screen_w//2-300, btn_y, btn_w, btn_h)  # Position ajustée
-        roll_color = (200,200,200) if self.roll_count > 0 and not self.ban_mode else (100,100,100)
+        btn_y = overlay_y + 30  # En haut de l'overlay
+        
+        # Si pas d'options disponibles, afficher message et bouton "Always Skip"
+        if len(self.upgrade_options) == 0:
+            # Message d'information
+            no_options_text = "🎯 Toutes les améliorations disponibles sont au maximum !"
+            no_options_surface = self.font.render(no_options_text, True, self.config.WHITE)
+            no_options_rect = no_options_surface.get_rect(center=(screen_w//2, screen_h//2))
+            self.screen.blit(no_options_surface, no_options_rect)
+            
+            # Bouton "Always Skip" à droite des autres boutons
+            always_skip_rect = pygame.Rect(screen_w//2+270, btn_y, btn_w, btn_h)
+            pygame.draw.rect(self.screen, (100,200,100), always_skip_rect, border_radius=10)
+            always_skip_surface = self.font.render("ALWAYS SKIP", True, self.config.BLACK)
+            always_skip_rect_center = always_skip_surface.get_rect(center=always_skip_rect.center)
+            self.screen.blit(always_skip_surface, always_skip_rect_center)
+        
+        # ROLL (recentré) - désactivé s'il n'y a pas d'options
+        roll_rect = pygame.Rect(screen_w//2-270, btn_y, btn_w, btn_h)
+        roll_enabled = self.roll_count > 0 and not self.ban_mode and len(self.upgrade_options) > 0
+        roll_color = (200,200,200) if roll_enabled else (100,100,100)
         pygame.draw.rect(self.screen, roll_color, roll_rect, border_radius=10)
         roll_text = f"ROLL ({self.roll_count})"
         roll_surface = self.font.render(roll_text, True, self.config.BLACK)
         roll_rect_center = roll_surface.get_rect(center=roll_rect.center)
         self.screen.blit(roll_surface, roll_rect_center)
         
-        # BAN
-        ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)  # Position ajustée
-        ban_color = (200,100,100) if self.ban_count > 0 and not self.ban_mode else (100,50,50)
+        # BAN (centre) - désactivé s'il n'y a pas d'options
+        ban_rect = pygame.Rect(screen_w//2-90, btn_y, btn_w, btn_h)
+        ban_enabled = self.ban_count > 0 and not self.ban_mode and len(self.upgrade_options) > 0
+        ban_color = (200,100,100) if ban_enabled else (100,50,50)
         pygame.draw.rect(self.screen, ban_color, ban_rect, border_radius=10)
         ban_text = f"BAN ({self.ban_count})"
         ban_surface = self.font.render(ban_text, True, self.config.BLACK)
         ban_rect_center = ban_surface.get_rect(center=ban_rect.center)
         self.screen.blit(ban_surface, ban_rect_center)
         
-        # SKIP
-        skip_rect = pygame.Rect(screen_w//2+120, btn_y, btn_w, btn_h)  # Position ajustée
+        # SKIP (recentré)
+        skip_rect = pygame.Rect(screen_w//2+90, btn_y, btn_w, btn_h)
         pygame.draw.rect(self.screen, (180,180,180), skip_rect, border_radius=10)
         skip_surface = self.font.render("SKIP", True, self.config.BLACK)
         skip_rect_center = skip_surface.get_rect(center=skip_rect.center)
@@ -1232,9 +1505,17 @@ class Game:
         for particle in self.particles:
             self.draw_entity_with_camera_offset(particle, camera_x, camera_y)
         
+        # Dessiner les particules de soudure (au premier plan pour effet brillant)
+        for welding_particle in self.welding_particles:
+            self.draw_entity_with_camera_offset(welding_particle, camera_x, camera_y)
+        
         # Dessiner les orb
         for orb in self.energy_orbs:
             self.draw_entity_with_camera_offset(orb, camera_x, camera_y)
+        
+        # Dessiner les effets de mort (au premier plan, avant le joueur)
+        for death_effect in self.death_effects:
+            death_effect.draw(self.screen, camera_x, camera_y)
         
         # Dessiner le joueur EN DERNIER (au premier plan)
         self.draw_entity_with_camera_offset(self.player, camera_x, camera_y)
@@ -1268,6 +1549,11 @@ class Game:
                     zaps_to_remove.append(zap)
                     
                     if enemy.health <= 0:
+                        # Créer effet de mort pour les ennemis spéciaux
+                        if enemy.is_special:
+                            death_effect = DeathEffect(enemy.x, enemy.y, self.config)
+                            self.death_effects.append(death_effect)
+                        
                         # Appliquer bonus si c'est un ennemi spécial
                         if enemy.is_special and enemy.bonus_type:
                             self.bonus_manager.apply_bonus(enemy.bonus_type, self)
@@ -1292,7 +1578,7 @@ class Game:
         for beam in self.beams:
             if beam.update():
                 # Vérifier les collisions avec les ennemis
-                hit_positions = beam.check_collision_with_enemies(self.enemies)
+                hit_positions = beam.check_collision_with_enemies(self.enemies, self)
                 # Créer des effets d'explosion pour chaque ennemi touché
                 for x, y in hit_positions:
                     self.create_explosion_particles(x, y)
@@ -1301,6 +1587,15 @@ class Game:
         
         # Nettoyer les particules (elles se suppriment automatiquement via update())
         self.particles = [particle for particle in self.particles if particle.update()]
+        
+        # Nettoyer les particules de soudure (elles se suppriment automatiquement via update())
+        self.welding_particles = [particle for particle in self.welding_particles if particle.update()]
+        
+        # Mettre à jour et nettoyer les effets de mort
+        for death_effect in self.death_effects[:]:
+            death_effect.update()
+            if death_effect.is_finished:
+                self.death_effects.remove(death_effect)
         
         # Nettoyer les orb et gérer leurs collisions
         player_center_x = self.player.x + self.player.size // 2
@@ -1325,6 +1620,11 @@ class Game:
                     self.particles.extend(impact_particles)
                     
                     if enemy.health <= 0:
+                        # Créer effet de mort pour les ennemis spéciaux
+                        if enemy.is_special:
+                            death_effect = DeathEffect(enemy.x, enemy.y, self.config)
+                            self.death_effects.append(death_effect)
+                        
                         # Appliquer bonus si c'est un ennemi spécial
                         if enemy.is_special and enemy.bonus_type:
                             self.bonus_manager.apply_bonus(enemy.bonus_type, self)
@@ -1346,6 +1646,12 @@ class Game:
                 print("LIGHTNING DÉBLOQUÉ ! Nouvelle arme disponible !")
             else:
                 print("Impossible d'ajouter Lightning : limite d'armes atteinte")
+        
+        elif upgrade_id == "weapon_orb":
+            if self.weapon_manager.add_weapon(OrbWeapon):
+                print("ORB DÉBLOQUÉ ! Nouvelle arme disponible !")
+            else:
+                print("Impossible d'ajouter Orb : limite d'armes atteinte")
         
         elif upgrade_id == "weapon_beam":
             if self.weapon_manager.add_weapon(BeamWeapon):
@@ -1403,15 +1709,23 @@ class Game:
         if not self.weapon_manager.has_weapon("Lightning") and len(self.weapon_manager.weapons) < 7:
             available_upgrades.append({
                 "id": "weapon_lightning", 
-                "name": "DÉBLOQUER: Lightning", 
+                "name": "DÉBLOQUER|LIGHTNING", 
                 "description": "Nouvelle arme: Lightning instantanés avec chaînage !",
+                "is_new_weapon": True
+            })
+        
+        if not self.weapon_manager.has_weapon("Orb") and len(self.weapon_manager.weapons) < 7:
+            available_upgrades.append({
+                "id": "weapon_orb", 
+                "name": "DÉBLOQUER|ORB", 
+                "description": "Nouvelle arme: Boules d'énergie orbitales !",
                 "is_new_weapon": True
             })
         
         if not self.weapon_manager.has_weapon("Beam") and len(self.weapon_manager.weapons) < 7:
             available_upgrades.append({
                 "id": "weapon_beam", 
-                "name": "DÉBLOQUER: Beam", 
+                "name": "DÉBLOQUER|BEAM", 
                 "description": "Nouvelle arme: Rayon laser qui traverse les ennemis !",
                 "is_new_weapon": True
             })
@@ -1421,7 +1735,7 @@ class Game:
             if weapon.level < weapon.max_level:
                 available_upgrades.append({
                     "id": f"upgrade_weapon_{weapon.name.lower()}", 
-                    "name": f"{weapon.name} Niv.{weapon.level + 1}", 
+                    "name": f"AMÉLIORER|{weapon.name.upper()} NIV.{weapon.level + 1}", 
                     "description": f"Améliore {weapon.name} (actuellement niveau {weapon.level})",
                     "is_new_weapon": False
                 })
@@ -1430,7 +1744,7 @@ class Game:
         if not self.skill_manager.has_skill("Vitesse") and len(self.skill_manager.skills) < 14:
             available_upgrades.append({
                 "id": "skill_speed", 
-                "name": "COMPÉTENCE: Vitesse", 
+                "name": "COMPÉTENCE|VITESSE", 
                 "description": "Nouvelle compétence: Augmente la vitesse de déplacement !",
                 "is_new_weapon": True
             })
@@ -1438,7 +1752,7 @@ class Game:
         if not self.skill_manager.has_skill("Bouclier") and len(self.skill_manager.skills) < 14:
             available_upgrades.append({
                 "id": "skill_shield", 
-                "name": "COMPÉTENCE: Bouclier", 
+                "name": "COMPÉTENCE|BOUCLIER", 
                 "description": "Nouvelle compétence: Protection contre les dégâts !",
                 "is_new_weapon": True
             })
@@ -1446,7 +1760,7 @@ class Game:
         if not self.skill_manager.has_skill("Régénération") and len(self.skill_manager.skills) < 14:
             available_upgrades.append({
                 "id": "skill_regen", 
-                "name": "COMPÉTENCE: Régénération", 
+                "name": "COMPÉTENCE|RÉGÉNÉRATION", 
                 "description": "Nouvelle compétence: Récupère la vie au fil du temps !",
                 "is_new_weapon": True
             })
@@ -1456,50 +1770,49 @@ class Game:
             if skill.level < skill.max_level:
                 available_upgrades.append({
                     "id": f"upgrade_skill_{skill.name.lower()}", 
-                    "name": f"{skill.name} Niv.{skill.level + 1}", 
+                    "name": f"AMÉLIORER|{skill.name.upper()} NIV.{skill.level + 1}", 
                     "description": f"Améliore {skill.name} (actuellement niveau {skill.level})",
                     "is_new_weapon": False
                 })
         
+        # === FILTRAGE DES OPTIONS BANNIES ===
+        # Exclure les options qui ont été bannies pendant cette partie
+        filtered_upgrades = []
+        banned_count = 0
+        for upgrade in available_upgrades:
+            if upgrade["name"] not in self.banned_upgrades:
+                filtered_upgrades.append(upgrade)
+            else:
+                banned_count += 1
+        
+        # Debug: Afficher le nombre d'options filtrées
+        if banned_count > 0:
+            print(f"🚫 {banned_count} option(s) bannie(s) exclue(s). Restantes: {len(filtered_upgrades)}")
+        
         # Retourner 3 options aléatoirement choisies (ou moins s'il n'y en a pas assez)
-        result = random.sample(available_upgrades, min(3, len(available_upgrades)))
+        result = random.sample(filtered_upgrades, min(3, len(filtered_upgrades)))
         return result
     
-    def handle_window_resize(self, new_width, new_height):
-        """Gère le redimensionnement de la fenêtre"""
-        # Tailles minimales pour éviter des fenêtres trop petites
-        min_width, min_height = 800, 600
-        new_width = max(min_width, new_width)
-        new_height = max(min_height, new_height)
+    def get_upgrade_combined_rects(self):
+        # Retourne les rects englobants (icône + bouton) pour chaque option
+        screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
         
-        # Mettre à jour la configuration
-        old_width = self.config.WINDOW_WIDTH
-        old_height = self.config.WINDOW_HEIGHT
+        # Calculer les dimensions pour englober icône + bouton + marge
+        icon_rects = self.get_upgrade_icon_rects()
+        option_rects = self.get_upgrade_option_rects()
         
-        self.config.WINDOW_WIDTH = new_width
-        self.config.WINDOW_HEIGHT = new_height
-        self.config.SCREEN_WIDTH = new_width
-        self.config.SCREEN_HEIGHT = new_height
+        combined_rects = []
+        for i in range(3):
+            icon_rect = icon_rects[i]
+            option_rect = option_rects[i]
+            
+            # Calculer le rectangle englobant avec marge
+            left = min(icon_rect.left, option_rect.left) - 10
+            top = icon_rect.top - 10
+            right = max(icon_rect.right, option_rect.right) + 10
+            bottom = option_rect.bottom + 10
+            
+            combined_rect = pygame.Rect(left, top, right - left, bottom - top)
+            combined_rects.append(combined_rect)
         
-        # Recalculer les éléments adaptatifs
-        self.config.recalculate_adaptive_sizes()
-        
-        # Recréer la surface d'affichage
-        self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
-        
-        # Recalculer les polices avec la nouvelle échelle
-        self.font = pygame.font.Font(None, int(36 * self.config.font_scale))
-        self.small_font = pygame.font.Font(None, int(24 * self.config.font_scale))
-        
-        # Ajuster la position de la caméra pour maintenir le centrage
-        camera_offset_x = (new_width - old_width) // 2
-        camera_offset_y = (new_height - old_height) // 2
-        self.camera_x -= camera_offset_x
-        self.camera_y -= camera_offset_y
-        
-        # Recreer les orb avec les nouvelles dimensions
-        if hasattr(self, 'energy_orbs') and self.energy_orbs:
-            self.energy_orbs.clear()
-            self.recreate_all_energy_orbs()
-        
-        print(f"Fenêtre redimensionnée: {new_width}x{new_height}")
+        return combined_rects

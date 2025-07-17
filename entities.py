@@ -28,27 +28,27 @@ class Player:
         self.facing_direction = "right"  # "left" ou "right"
         self.last_movement_x = 0  # Pour détecter le changement de direction
         
-        # Animation
+        # Animation avec 5 sprites
         self.animation_frames = []  # Liste des frames d'animation
         self.animation_frames_left = []  # Frames pour la direction gauche
         self.current_frame = 0
         self.animation_timer = 0
-        self.frame_sequence = [0, 1, 2, 1]  # Séquence 1-2-3-2
+        self.frame_sequence = [4, 3, 2, 1, 0]  # Séquence 5-4-3-2-1 en boucle
         self.sequence_index = 0
         
-        # Charger la spritesheet Birds.png
+        # Charger la spritesheet player2.png
         try:
-            spritesheet = pygame.image.load("assets/Birds.png").convert_alpha()
+            spritesheet = pygame.image.load("assets/player/player2.png").convert_alpha()
             
-            # Dimensions des sprites individuels (64x64 pixels)
-            sprite_width = 64
-            sprite_height = 64
+            # Dimensions des sprites individuels (à ajuster selon votre image)
+            sprite_width = spritesheet.get_width() // 5  # 5 sprites horizontalement
+            sprite_height = spritesheet.get_height()
             
-            sprite_size = self.size * 4  # Facteur d'échelle x2 supplémentaire pour une meilleure visibilité
+            sprite_size = self.size * 4  # Facteur d'échelle x4 pour une meilleure visibilité
             
-            # Extraire les 3 premiers sprites (64x64 chacun)
-            for i in range(3):
-                # Extraire le sprite à la position (i * 64, 0)
+            # Extraire les 5 sprites (positions 0, 1, 2, 3, 4)
+            for i in range(5):
+                # Extraire le sprite à la position (i * sprite_width, 0)
                 frame_rect = pygame.Rect(i * sprite_width, 0, sprite_width, sprite_height)
                 frame = spritesheet.subsurface(frame_rect).copy()
                 
@@ -68,9 +68,9 @@ class Player:
                 self.animation_frames_left.append(frame_left)
             
             self.has_image = True
-            print(f"Animation spritesheet du joueur activée (3 frames, séquence 1-2-3-2)")
+            print(f"Animation spritesheet du joueur activée (5 frames, séquence 5-4-3-2-1 en boucle)")
         except (pygame.error, FileNotFoundError):
-            print("Spritesheet assets/Birds.png non trouvée, utilisation du rendu par défaut")
+            print("Spritesheet assets/player/player2.png non trouvée, utilisation du rendu par défaut")
             self.animation_frames = []
             self.animation_frames_left = []
             self.has_image = False
@@ -135,7 +135,7 @@ class Player:
         """Dessine le joueur avec l'animation de spritesheet"""
         if self.has_image and self.animation_frames and self.animation_frames_left:
             # Choisir la bonne liste de frames selon la direction
-            current_frames = self.animation_frames_left if self.facing_direction == "right" else self.animation_frames
+            current_frames = self.animation_frames if self.facing_direction == "right" else self.animation_frames_left
             
             # S'assurer que current_frame est dans les limites
             if self.current_frame < len(current_frames):
@@ -207,7 +207,7 @@ class Enemy:
             cls.sprites = {}
             try:
                 # Charger les sprites 1.png à 5.png
-                for i in range(1, 21):
+                for i in range(1, 24):
                     sprite_path = f"assets/Enemy/{i}.png"
                     sprite = pygame.image.load(sprite_path).convert_alpha()
                     # Les sprites sont maintenant redimensionnés selon le preset actuel
@@ -502,23 +502,27 @@ class Lightning:
             # Éclair chaîné : couleur violette/magenta
             color = tuple(int(c * intensity) for c in (255, 100, 255))
             secondary_color = tuple(int(c * intensity) for c in (200, 50, 200))
-            thickness = 2  # Plus fin
+            thickness = 4  # Augmenté de 2 à 4
         else:
             # Éclair principal : couleur blanche/bleue
             color = tuple(int(c * intensity) for c in self.config.LIGHTNING_COLOR)
             secondary_color = tuple(int(c * intensity) for c in self.config.LIGHTNING_SECONDARY_COLOR)
-            thickness = 3  # Plus épais
+            thickness = 6  # Augmenté de 3 à 6
         
         # Dessiner les segments de l'éclair avec ajustement de caméra
         for i in range(len(self.points) - 1):
             start_point = (int(self.points[i][0] - camera_x), int(self.points[i][1] - camera_y))
             end_point = (int(self.points[i + 1][0] - camera_x), int(self.points[i + 1][1] - camera_y))
             
-            # Ligne principale
+            # Ligne principale (plus épaisse)
             pygame.draw.line(screen, color, start_point, end_point, thickness)
             
-            # Ligne secondaire pour l'effet de lueur
-            pygame.draw.line(screen, secondary_color, start_point, end_point, 1)
+            # Ligne secondaire pour l'effet de lueur (plus épaisse aussi)
+            pygame.draw.line(screen, secondary_color, start_point, end_point, thickness // 2)
+            
+            # Ligne centrale ultra-brillante
+            inner_color = tuple(min(255, int(c * 1.5)) for c in color)
+            pygame.draw.line(screen, inner_color, start_point, end_point, max(1, thickness // 3))
 
 
 class Particle:
@@ -575,6 +579,121 @@ class Particle:
         
         # Dessiner la particule
         pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.size)
+
+
+class WeldingParticle:
+    """Classe pour les particules de soudure (effet du Beam)"""
+    
+    def __init__(self, x, y, config, direction_x=None, direction_y=None):
+        self.x = x
+        self.y = y
+        self.config = config
+        
+        # Particules plus rapides et dans toutes les directions
+        if direction_x is not None and direction_y is not None:
+            # 50% des particules rebondissent depuis l'impact
+            if random.random() < 0.5:
+                angle_variation = math.pi / 3  # 60° de variation (plus large)
+                base_angle = math.atan2(direction_y, direction_x) + math.pi  # Direction opposée
+                angle = base_angle + random.uniform(-angle_variation, angle_variation)
+            else:
+                # 50% des particules vont dans toutes les directions
+                angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(2.0, 6.0) * config.PARTICLE_SPEED  # Beaucoup plus rapides
+        else:
+            # Particules complètement aléatoires et rapides
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(1.5, 5.0) * config.PARTICLE_SPEED
+            
+        self.vel_x = math.cos(angle) * speed
+        self.vel_y = math.sin(angle) * speed
+        
+        # Propriétés visuelles TRÈS brillantes pour la soudure
+        self.color = random.choice([
+            (255, 255, 255),  # Blanc éclatant
+            (255, 255, 255),  # Plus de blanc pour plus de brillance
+            (255, 255, 200),  # Jaune très brillant
+            (255, 255, 150),  # Jaune éclatant
+            (200, 255, 255),  # Bleu électrique brillant
+            (255, 200, 255),  # Violet électrique brillant
+            (255, 255, 100),  # Jaune pur brillant
+            (150, 255, 255),  # Cyan électrique
+        ])
+        self.size = 1  # Particules très petites comme de vraies étincelles
+        self.lifetime = random.randint(12, 25)  # Durée de vie réduite
+        self.current_life = self.lifetime
+        
+        # Pas de gravité pour l'effet de soudure (particules électriques)
+        self.gravity = 0
+        
+        # Scintillement plus intense
+        self.flicker_timer = 0
+        self.flicker_speed = random.uniform(0.3, 0.8)  # Vitesse de scintillement variée
+    
+    def update(self):
+        """Met à jour la particule de soudure"""
+        # Mouvement
+        self.x += self.vel_x
+        self.y += self.vel_y
+        
+        # Friction moins importante pour garder la vitesse
+        self.vel_x *= 0.97  # Moins de friction = plus rapide plus longtemps
+        self.vel_y *= 0.97
+        
+        # Durée de vie
+        self.current_life -= 1
+        self.flicker_timer += 1
+        
+        return self.current_life > 0
+    
+    def draw(self, screen):
+        """Dessine la particule de soudure avec effet TRÈS brillant"""
+        if self.current_life <= 0:
+            return
+        
+        # Transparence basée sur la durée de vie
+        alpha = self.current_life / self.lifetime
+        
+        # Effet de scintillement INTENSE
+        flicker = 0.6 + 0.4 * math.sin(self.flicker_timer * self.flicker_speed)
+        alpha *= flicker
+        
+        # Intensité augmentée pour plus de brillance
+        brightness_multiplier = 1.3  # 30% plus brillant
+        color = tuple(min(255, int(c * alpha * brightness_multiplier)) for c in self.color)
+        
+        # Dessiner la particule avec effet de halo INTENSE mais adapté à la petite taille
+        center_x, center_y = int(self.x), int(self.y)
+        
+        if self.config.ENABLE_ANTIALIASING:
+            # Version avec antialiasing - effet de halo réduit pour petites particules
+            halo_size = self.size + 1  # Halo très petit
+            for i in range(halo_size, 0, -1):
+                halo_alpha = alpha * (1.0 - i / (halo_size + 2)) * 0.4  # Halo plus subtil
+                halo_color = tuple(min(255, int(c * halo_alpha * brightness_multiplier)) for c in self.color)
+                try:
+                    pygame.gfxdraw.filled_circle(screen, center_x, center_y, i, halo_color)
+                    pygame.gfxdraw.aacircle(screen, center_x, center_y, i, halo_color)
+                except:
+                    pygame.draw.circle(screen, halo_color, (center_x, center_y), i)
+            
+            # Centre ultra-brillant (toujours au moins 1 pixel)
+            core_color = tuple(min(255, int(c * alpha * 1.5)) for c in self.color)  # Centre 50% plus brillant
+            try:
+                pygame.gfxdraw.filled_circle(screen, center_x, center_y, 1, core_color)
+                pygame.gfxdraw.aacircle(screen, center_x, center_y, 1, core_color)
+            except:
+                pygame.draw.circle(screen, core_color, (center_x, center_y), 1)
+        else:
+            # Version normale avec halo manuel très réduit
+            # Halo minimal pour petites particules
+            if self.size > 1:
+                halo_alpha = alpha * 0.3
+                halo_color = tuple(min(255, int(c * halo_alpha * brightness_multiplier)) for c in self.color)
+                pygame.draw.circle(screen, halo_color, (center_x, center_y), self.size + 1)
+            
+            # Centre brillant (toujours au moins 1 pixel)
+            pygame.draw.circle(screen, color, (center_x, center_y), max(1, self.size))
 
 
 class EnergyOrb:
@@ -782,96 +901,131 @@ class BonusManager:
 
 class Beam:
     """
-    Classe pour les rayons laser continus
+    Classe pour les rayons laser continus avec rotation
     
     NOUVEAU COMPORTEMENT:
-    - Le point de destination (fixed_end_x, fixed_end_y) est fixé lors de la création
-    - Le point d'origine (start_x, start_y) suit le joueur en temps réel
-    - La direction et la portée sont recalculées à chaque frame
-    - Cela crée un effet de "faisceau pivotant" depuis le joueur vers un point fixe
+    - Vise l'ennemi le plus proche au moment de la création
+    - Effectue une rotation antihoraire autour du joueur pendant sa durée de vie
+    - La rotation augmente avec le niveau (30° à 360° au niveau 10)
+    - La durée augmente avec le niveau (1s à 3s au niveau 10)
     """
     
     def __init__(self, start_x, start_y, direction_x, direction_y, config, level, player=None):
         from weapon_config import get_weapon_stat
         
-        # Point d'origine initial (sera mis à jour avec le joueur)
-        self.start_x = start_x
-        self.start_y = start_y
-        
-        # Point de destination FIXE (calculé une seule fois)
-        self.range = get_weapon_stat("Beam", "range", level)
-        self.fixed_end_x = start_x + direction_x * self.range
-        self.fixed_end_y = start_y + direction_y * self.range
-        
-        # Référence au joueur pour suivre ses mouvements
+        # Position du joueur (centre de rotation)
         self.player = player
+        self.center_x = start_x
+        self.center_y = start_y
         
         self.config = config
         self.level = level
         
         # Propriétés du faisceau
+        self.range = get_weapon_stat("Beam", "range", level)
         self.width = get_weapon_stat("Beam", "width", level)
         self.damage = get_weapon_stat("Beam", "damage", level)
         
-        # Direction et point final actuels (recalculés à chaque frame)
-        self.current_direction_x = direction_x
-        self.current_direction_y = direction_y
-        self.current_end_x = self.fixed_end_x
-        self.current_end_y = self.fixed_end_y
-        self.current_range = self.range
+        # Nouvelle gestion de la durée et rotation avec progressions
+        beam_config = getattr(config, 'BEAM', None)
+        if hasattr(config, 'BEAM') and hasattr(config.BEAM, 'duration_progression'):
+            # Si on a accès à la config complète
+            duration_progression = getattr(config.BEAM, 'duration_progression', [60] * 10)
+            rotation_progression = getattr(config.BEAM, 'rotation_progression', [30] * 10)
+        else:
+            # Fallback avec progressions codées en dur
+            duration_progression = [60, 75, 90, 105, 120, 135, 150, 165, 180, 180]
+            rotation_progression = [30, 45, 60, 90, 120, 180, 240, 270, 320, 360]
         
-        # Durée de vie du faisceau
-        self.duration = config.BEAM_DURATION if hasattr(config, 'BEAM_DURATION') else 60
+        # Durée et rotation selon le niveau
+        level_index = min(level - 1, len(duration_progression) - 1)
+        self.duration = duration_progression[level_index]
+        self.total_rotation_degrees = rotation_progression[level_index]
+        
         self.current_life = self.duration
+        
+        # Angle initial vers l'ennemi le plus proche
+        self.initial_angle = math.atan2(direction_y, direction_x)
+        self.current_angle = self.initial_angle
+        
+        # Vitesse de rotation (antihoraire)
+        self.rotation_speed = math.radians(self.total_rotation_degrees) / self.duration  # radians par frame
+        
+        # Calcul des points actuels du beam
+        self.start_x = self.center_x
+        self.start_y = self.center_y
+        self.end_x = self.center_x + math.cos(self.current_angle) * self.range
+        self.end_y = self.center_y + math.sin(self.current_angle) * self.range
         
         # Liste des ennemis déjà touchés pour éviter les dégâts multiples
         self.hit_enemies = set()
+        
+        # Timer pour la génération continue de particules
+        self.particle_timer = 0
     
     def update(self):
-        """Met à jour le faisceau"""
+        """Met à jour le faisceau avec rotation antihoraire"""
         self.current_life -= 1
+        self.particle_timer += 1  # Incrémenter le timer des particules
         
-        # Mettre à jour la position d'origine avec le joueur
+        # Mettre à jour la position du centre avec le joueur
         if self.player:
             player_center_x = self.player.x + self.player.size // 2
             player_center_y = self.player.y + self.player.size // 2
-            self.start_x = player_center_x
-            self.start_y = player_center_y
-            
-            # Recalculer la direction vers le point de destination fixe
-            dx = self.fixed_end_x - self.start_x
-            dy = self.fixed_end_y - self.start_y
-            current_distance = math.sqrt(dx**2 + dy**2)
-            
-            if current_distance > 0:
-                self.current_direction_x = dx / current_distance
-                self.current_direction_y = dy / current_distance
-                self.current_range = current_distance
-                self.current_end_x = self.fixed_end_x
-                self.current_end_y = self.fixed_end_y
-            else:
-                # Si le joueur est exactement sur le point de destination
-                self.current_direction_x = 0
-                self.current_direction_y = 0
-                self.current_range = 0
-                self.current_end_x = self.start_x
-                self.current_end_y = self.start_y
+            self.center_x = player_center_x
+            self.center_y = player_center_y
+        
+        # Effectuer la rotation antihoraire
+        self.current_angle = self.initial_angle + (self.duration - self.current_life) * self.rotation_speed
+        
+        # Recalculer les points du beam
+        self.start_x = self.center_x
+        self.start_y = self.center_y
+        self.end_x = self.center_x + math.cos(self.current_angle) * self.range
+        self.end_y = self.center_y + math.sin(self.current_angle) * self.range
         
         return self.current_life > 0
     
-    def check_collision_with_enemies(self, enemies):
+    def check_collision_with_enemies(self, enemies, game=None):
         """Vérifie les collisions avec les ennemis et applique les dégâts"""
         hit_positions = []
+        continuous_hits = []  # Pour les particules continues
+        
+        # Direction actuelle du beam pour les particules
+        dx = self.end_x - self.start_x
+        dy = self.end_y - self.start_y
+        beam_length = math.sqrt(dx**2 + dy**2)
+        if beam_length > 0:
+            current_direction_x = dx / beam_length
+            current_direction_y = dy / beam_length
+        else:
+            current_direction_x, current_direction_y = 1, 0
         
         for enemy in enemies:
-            if id(enemy) in self.hit_enemies:
-                continue  # Éviter de toucher plusieurs fois le même ennemi
-            
             # Vérifier si l'ennemi intersecte avec le rayon laser
             if self.line_intersects_rect(enemy):
-                enemy.take_damage(self.damage)
-                self.hit_enemies.add(id(enemy))
-                hit_positions.append((enemy.x + enemy.size // 2, enemy.y + enemy.size // 2))
+                # Calculer le point d'impact pour les particules
+                impact_x = enemy.x + enemy.size // 2
+                impact_y = enemy.y + enemy.size // 2
+                
+                # Générer des particules de soudure en continu (fréquence réduite)
+                if game and self.particle_timer % 4 == 0:  # Toutes les 4 frames = effet continu mais plus modéré
+                    game.create_welding_particles(impact_x, impact_y, 
+                                                 current_direction_x, 
+                                                 current_direction_y)
+                
+                # Appliquer les dégâts seulement une fois par ennemi
+                if id(enemy) not in self.hit_enemies:
+                    enemy_was_alive = enemy.health > 0
+                    enemy.take_damage(self.damage)
+                    self.hit_enemies.add(id(enemy))
+                    
+                    # Si l'ennemi est éliminé, créer une explosion renforcée
+                    if enemy_was_alive and enemy.health <= 0 and game:
+                        game.create_beam_explosion_particles(impact_x, impact_y)
+                
+                hit_positions.append((impact_x, impact_y))
+                continuous_hits.append((impact_x, impact_y))
         
         return hit_positions
     
@@ -896,27 +1050,37 @@ class Beam:
     
     def point_to_line_distance(self, px, py):
         """Calcule la distance d'un point à la ligne du rayon"""
-        # Utiliser la direction actuelle
-        line_length = math.sqrt(self.current_direction_x**2 + self.current_direction_y**2)
+        # Utiliser les coordonnées actuelles du beam
+        dx = self.end_x - self.start_x
+        dy = self.end_y - self.start_y
+        line_length = math.sqrt(dx**2 + dy**2)
+        
         if line_length == 0:
             return math.sqrt((px - self.start_x)**2 + (py - self.start_y)**2)
         
+        # Normaliser la direction
+        dir_x = dx / line_length
+        dir_y = dy / line_length
+        
         # Distance perpendiculaire à la ligne
-        t = ((px - self.start_x) * self.current_direction_x + (py - self.start_y) * self.current_direction_y) / (line_length**2)
+        t = ((px - self.start_x) * dir_x + (py - self.start_y) * dir_y)
         
         # Point le plus proche sur la ligne
-        closest_x = self.start_x + t * self.current_direction_x * line_length
-        closest_y = self.start_y + t * self.current_direction_y * line_length
+        closest_x = self.start_x + t * dir_x
+        closest_y = self.start_y + t * dir_y
         
         return math.sqrt((px - closest_x)**2 + (py - closest_y)**2)
     
     def project_point_on_line(self, px, py):
         """Projette un point sur la ligne et retourne la position normalisée (0-1)"""
-        line_length_sq = self.current_range**2
+        dx = self.end_x - self.start_x
+        dy = self.end_y - self.start_y
+        line_length_sq = dx**2 + dy**2
+        
         if line_length_sq == 0:
             return 0
         
-        t = ((px - self.start_x) * self.current_direction_x + (py - self.start_y) * self.current_direction_y) * self.current_range / line_length_sq
+        t = ((px - self.start_x) * dx + (py - self.start_y) * dy) / line_length_sq
         return max(0, min(1, t))
     
     def draw(self, screen, camera_x=0, camera_y=0):
@@ -933,7 +1097,7 @@ class Beam:
         
         # Points ajustés pour la caméra (utiliser les coordonnées actuelles)
         start_point = (int(self.start_x - camera_x), int(self.start_y - camera_y))
-        end_point = (int(self.current_end_x - camera_x), int(self.current_end_y - camera_y))
+        end_point = (int(self.end_x - camera_x), int(self.end_y - camera_y))
         
         # Dessiner la lueur (plus large)
         if self.width > 2:
@@ -945,3 +1109,98 @@ class Beam:
         
         # Point lumineux au départ
         pygame.draw.circle(screen, core_color, start_point, max(2, int(self.width * 0.3)))
+
+class DeathEffect:
+    """Effet spécial pour la mort des ennemis spéciaux"""
+    
+    def __init__(self, x, y, config):
+        self.x = x
+        self.y = y
+        self.start_x = x
+        self.start_y = y
+        self.config = config
+        
+        # Paramètres de l'animation
+        self.life_time = 0
+        self.fade_in_duration = 6  # 0.1s à 60 FPS
+        self.display_duration = 30  # 0.5s à 60 FPS
+        self.fade_out_duration = 30  # 0.5s à 60 FPS
+        self.total_duration = self.fade_in_duration + self.display_duration + self.fade_out_duration
+        self.rise_distance = 200  # pixels à monter
+        
+        # État de l'animation
+        self.alpha = 0
+        self.is_finished = False
+        
+        # Charger le sprite mort.png
+        try:
+            self.sprite = pygame.image.load("assets/enemy/mort.png").convert_alpha()
+            # Redimensionner le sprite (par exemple à la taille d'un ennemi spécial)
+            sprite_size = config.ENEMY_SIZE * 2  # Taille d'un ennemi spécial
+            if config.SPRITE_SMOOTHING:
+                self.sprite = pygame.transform.smoothscale(self.sprite, (sprite_size, sprite_size))
+            else:
+                self.sprite = pygame.transform.scale(self.sprite, (sprite_size, sprite_size))
+            self.sprite = self.sprite.convert_alpha()
+            self.has_sprite = True
+        except (pygame.error, FileNotFoundError):
+            print("Sprite assets/enemy/mort.png non trouvé, utilisation d'un effet par défaut")
+            self.sprite = None
+            self.has_sprite = False
+    
+    def update(self):
+        """Met à jour l'animation de l'effet de mort"""
+        self.life_time += 1
+        
+        # Calculer la position Y (mouvement vers le haut)
+        progress = min(self.life_time / self.total_duration, 1.0)
+        self.y = self.start_y - (self.rise_distance * progress)
+        
+        # Calculer l'alpha selon la phase
+        if self.life_time <= self.fade_in_duration:
+            # Phase fade in
+            self.alpha = int(255 * (self.life_time / self.fade_in_duration))
+        elif self.life_time <= self.fade_in_duration + self.display_duration:
+            # Phase d'affichage complet
+            self.alpha = 255
+        elif self.life_time <= self.total_duration:
+            # Phase fade out
+            fade_out_progress = (self.life_time - self.fade_in_duration - self.display_duration) / self.fade_out_duration
+            self.alpha = int(255 * (1.0 - fade_out_progress))
+        else:
+            # Animation terminée
+            self.alpha = 0
+            self.is_finished = True
+        
+        # S'assurer que l'alpha reste dans les limites
+        self.alpha = max(0, min(255, self.alpha))
+    
+    def draw(self, screen, camera_x, camera_y):
+        """Dessine l'effet de mort avec l'offset de caméra"""
+        if self.is_finished or self.alpha <= 0:
+            return
+        
+        # Position à l'écran avec offset de caméra
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+        
+        if self.has_sprite:
+            # Créer une copie du sprite avec l'alpha approprié
+            sprite_with_alpha = self.sprite.copy()
+            sprite_with_alpha.set_alpha(self.alpha)
+            
+            # Centrer le sprite
+            sprite_rect = sprite_with_alpha.get_rect()
+            sprite_rect.center = (screen_x, screen_y)
+            
+            screen.blit(sprite_with_alpha, sprite_rect)
+        else:
+            # Effet par défaut si le sprite n'est pas disponible
+            # Cercle rouge qui disparaît
+            radius = max(10, 30 - int(20 * (self.life_time / self.total_duration)))
+            color = (255, 0, 0, self.alpha)  # Rouge avec alpha
+            
+            # Créer une surface temporaire pour l'alpha
+            temp_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(temp_surface, color, (radius, radius), radius)
+            screen.blit(temp_surface, (screen_x - radius, screen_y - radius))

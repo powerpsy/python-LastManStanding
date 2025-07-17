@@ -36,7 +36,7 @@ class Config:
         self.FPS = 60
         
         # Paramètres de jeu fixes
-        self.PLAYER_MAX_HEALTH = 100
+        self.PLAYER_MAX_HEALTH = 300
         self.PLAYER_FRICTION = 0.85
         self.ENEMY_HEALTH = 20
         self.ENEMY_DAMAGE = 10
@@ -241,7 +241,7 @@ class Config:
         self.INITIAL_ENEMIES_PER_WAVE = 1
         self.ENEMIES_INCREASE_PER_WAVE = 5
         self.ENEMY_SPAWN_DELAY_BASE = 19
-        self.ENEMY_SPAWN_DELAY_MIN = 5
+        self.ENEMY_SPAWN_DELAY_MIN = 1
         self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85
         
         # Système de caméra (identique pour tous)
