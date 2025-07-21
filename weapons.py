@@ -354,20 +354,6 @@ class SpeedSkill(Skill):
         player.speed = base_speed * multiplier
 
 
-class ShieldSkill(Skill):
-    """Compétence de bouclier"""
-    
-    def __init__(self):
-        config = SkillConfig.SHIELD
-        super().__init__(config["name"], config["description"], max_level=config["max_level"])
-        self.config = config
-        self.shield_points = 0
-    
-    def apply_effect(self, player, config):
-        # Donne des points de bouclier selon la progression
-        self.shield_points = get_skill_stat("Shield", "shield", self.level)
-
-
 class RegenSkill(Skill):
     """Compétence de régénération"""
     

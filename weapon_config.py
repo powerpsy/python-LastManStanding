@@ -94,17 +94,6 @@ class SkillConfig:
         "speed_progression": [1.0, 1.15, 1.30, 1.45, 1.60]
     }
     
-    # === BOUCLIER ===
-    SHIELD = {
-        "name": "Bouclier",
-        "description": "Donne des points de bouclier",
-        "max_level": 10,
-        "base_shield_points": 0,
-        
-        # Progression: +2 points par niveau
-        "shield_progression": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
-    }
-    
     # === RÉGÉNÉRATION ===
     REGENERATION = {
         "name": "Régénération",

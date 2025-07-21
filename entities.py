@@ -131,8 +131,35 @@ class Player:
         """Fait subir des dégâts au joueur"""
         self.health = max(0, self.health - damage)
     
-    def draw(self, screen):
-        """Dessine le joueur avec l'animation de spritesheet"""
+    def draw(self, screen, shield_hits=0):
+        """Dessine le joueur avec l'animation de spritesheet et l'effet de bouclier"""
+        
+        # === EFFET DE BOUCLIER ===
+        if shield_hits > 0:
+            center_x = int(self.x + self.size//2)
+            center_y = int(self.y + self.size//2)
+            shield_radius = int(self.size * 0.8)  # Rayon plus grand que le joueur
+            
+            # Couleur bleue pour le bouclier avec transparence
+            shield_color = (100, 150, 255)  # Bleu clair
+            shield_border_color = (50, 100, 255)  # Bleu plus foncé pour le contour
+            
+            # Dessiner le cercle de bouclier avec effet de pulsation
+            import math
+            import pygame.time
+            pulse = math.sin(pygame.time.get_ticks() * 0.005) * 0.1 + 1.0  # Pulsation entre 0.9 et 1.1
+            current_radius = int(shield_radius * pulse)
+            
+            # Dessiner le bouclier
+            if self.config.ENABLE_ANTIALIASING:
+                # Cercle semi-transparent avec antialiasing
+                pygame.gfxdraw.aacircle(screen, center_x, center_y, current_radius, shield_border_color)
+                pygame.gfxdraw.aacircle(screen, center_x, center_y, current_radius + 1, shield_border_color)
+            else:
+                # Cercle normal
+                pygame.draw.circle(screen, shield_border_color, (center_x, center_y), current_radius, 2)
+        
+        # === DESSIN DU JOUEUR ===
         if self.has_image and self.animation_frames and self.animation_frames_left:
             # Choisir la bonne liste de frames selon la direction
             current_frames = self.animation_frames if self.facing_direction == "right" else self.animation_frames_left

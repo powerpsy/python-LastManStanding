@@ -34,10 +34,11 @@
 - [ ] **Interface graphique** : Menus avec boutons et graphismes améliorés
 
 ### 🎮 Gameplay et Mécaniques
-- [ ] **Système d'armes** : Différents types d'armes avec caractéristiques uniques
-- [ ] **Capacités spéciales** : Compétences déblocables avec cooldowns
+- [x] **Système d'armes** : Différents types d'armes avec caractéristiques uniques
+- [x] **Capacités spéciales** : Compétences déblocables avec cooldowns
+- [x] **Système de loot** : Objets ramassables avec effets temporaires (cœurs de vie)
+- [x] **Système de bouclier** : Protection temporaire obtenue en tuant les ennemis d'élite
 - [ ] **Boss battles** : Ennemis uniques avec patterns d'attaque complexes
-- [ ] **Système de loot** : Objets ramassables avec effets temporaires/permanents
 - [ ] **Modes de difficulté** : Ajustement de la difficulté selon le niveau
 
 ### 🤖 Intelligence Artificielle

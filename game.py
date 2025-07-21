@@ -4,7 +4,7 @@ import random
 import math
 from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart
 from background import Background
-from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, ShieldSkill, RegenSkill
+from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill
 
 class Game:
     """Classe principale du jeu"""
@@ -25,6 +25,22 @@ class Game:
         self.screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), flags)
         pygame.display.set_caption("Last Man Standing")
         self.clock = pygame.time.Clock()
+        
+        # === CURSEUR PERSONNALISÉ ===
+        try:
+            # Charger l'image du curseur
+            cursor_image = pygame.image.load("assets/player/pointer.png").convert_alpha()
+            # Redimensionner si nécessaire (2x plus gros que la taille de base)
+            cursor_size = max(48, int(48 * self.config.font_scale))  # Taille adaptative x2
+            cursor_image = pygame.transform.scale(cursor_image, (cursor_size, cursor_size))
+            # Créer le curseur avec le hotspot au centre de l'image
+            hotspot = (cursor_size // 2, cursor_size // 2)
+            cursor = pygame.cursors.Cursor(hotspot, cursor_image)
+            pygame.mouse.set_cursor(cursor)
+            print(f"Curseur personnalisé chargé: assets/player/pointer.png ({cursor_size}x{cursor_size})")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"Impossible de charger le curseur personnalisé: {e}")
+            print("Utilisation du curseur par défaut")
         
         # Police adaptative
         self.font = pygame.font.Font(None, int(36 * self.config.font_scale))
@@ -1536,7 +1552,13 @@ class Game:
         entity_screen_y = entity.y - camera_y
         temp_x, temp_y = entity.x, entity.y
         entity.x, entity.y = entity_screen_x, entity_screen_y
-        entity.draw(self.screen)
+        
+        # Si c'est le joueur, passer l'état du bouclier
+        if entity == self.player:
+            entity.draw(self.screen, shield_hits=self.bonus_manager.shield_hits_remaining)
+        else:
+            entity.draw(self.screen)
+        
         entity.x, entity.y = temp_x, temp_y
     
     def draw_entities(self, camera_x, camera_y):
@@ -1741,12 +1763,6 @@ class Game:
             else:
                 print("Impossible d'ajouter Vitesse : limite de compétences atteinte")
         
-        elif upgrade_id == "skill_shield":
-            if self.skill_manager.add_skill(ShieldSkill):
-                print("COMPÉTENCE BOUCLIER DÉBLOQUÉE !")
-            else:
-                print("Impossible d'ajouter Bouclier : limite de compétences atteinte")
-        
         elif upgrade_id == "skill_regen":
             if self.skill_manager.add_skill(RegenSkill):
                 print("COMPÉTENCE RÉGÉNÉRATION DÉBLOQUÉE !")
@@ -1811,14 +1827,6 @@ class Game:
                 "id": "skill_speed", 
                 "name": "COMPÉTENCE|VITESSE", 
                 "description": "Nouvelle compétence: Augmente la vitesse de déplacement !",
-                "is_new_weapon": True
-            })
-        
-        if not self.skill_manager.has_skill("Bouclier") and len(self.skill_manager.skills) < 14:
-            available_upgrades.append({
-                "id": "skill_shield", 
-                "name": "COMPÉTENCE|BOUCLIER", 
-                "description": "Nouvelle compétence: Protection contre les dégâts !",
                 "is_new_weapon": True
             })
         
