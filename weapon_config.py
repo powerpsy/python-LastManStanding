@@ -29,10 +29,10 @@ class WeaponConfig:
         "max_level": 10,
         "base_damage": 150,  # Triplé de 50 à 150
         "base_fire_rate": 120,  # frames entre les tirs (2 secondes)
-        "base_range": 384,
+        "base_range": 500,
         "chain_range": 256,
         "base_chain_count": 1,
-        "display_time": 12,  # Doublé de 6 à 12 frames (0.2s à 60 FPS)
+        "display_time": 18,  # Doublé de 6 à 12 frames (0.2s à 60 FPS)
         
         # Progressions par niveau
         "damage_progression": [1.0, 1.3, 1.69, 2.20, 2.86, 3.72, 4.84, 6.29, 8.18, 10.63],
@@ -179,12 +179,6 @@ class UpgradeConfig:
             10: 10,  # 10% de chance niveau 10
             15: 10   # 10% de chance niveau 15+
         }
-    }
-    
-    # Coût d'amélioration par niveau (si système de monnaie)
-    UPGRADE_COSTS = {
-        "weapons": [0, 10, 20, 35, 55, 80, 110, 145, 185, 230],
-        "skills": [0, 5, 10, 18, 28, 40]
     }
 
 

@@ -4,6 +4,7 @@ Classes du joueur et des entités du jeu
 
 import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
+import pygame.surfarray  # Pour l'accès aux pixels
 import random
 import math
 
@@ -145,8 +146,6 @@ class Player:
             shield_border_color = (50, 100, 255)  # Bleu plus foncé pour le contour
             
             # Dessiner le cercle de bouclier avec effet de pulsation
-            import math
-            import pygame.time
             pulse = math.sin(pygame.time.get_ticks() * 0.005) * 0.1 + 1.0  # Pulsation entre 0.9 et 1.1
             current_radius = int(shield_radius * pulse)
             
@@ -301,6 +300,10 @@ class Enemy:
             
         self.health = self.max_health
         
+        # Type de mort pour les effets spéciaux
+        self.death_type = None  # "lightning", "orb", "beam", ou None pour explosion normale
+        self.death_data = {}  # Données supplémentaires pour l'effet de mort
+        
         # Animation de rotation (ping-pong de -5° à +5° accéléré)
         self.rotation_angle = 0
         self.rotation_time = 0
@@ -310,6 +313,11 @@ class Enemy:
         self.random_offset_x = 0
         self.random_offset_y = 0
         self.random_timer = 0
+        
+        # Attributs spécifiques au tireur (ennemi 14)
+        self.is_shooter = (self.sprite_id == config.SHOOTER_ENEMY_SPRITE_ID)
+        self.fire_timer = 0
+        self.is_stationary = False  # L'ennemi tireur devient stationnaire quand il est proche
     
     def update(self, player_x, player_y):
         """Met à jour la position de l'ennemi (suit le joueur)"""
@@ -333,239 +341,68 @@ class Enemy:
         dy = player_y - (self.y + self.size//2)
         distance = math.sqrt(dx**2 + dy**2)
         
-        if distance > 0:
-            # Normaliser et ajouter composante aléatoire
-            dx = (dx / distance) + self.random_offset_x
-            dy = (dy / distance) + self.random_offset_y
-            # Normalisation pour vitesse constante
-            norm = math.sqrt(dx**2 + dy**2)
-            if norm > 0:
-                dx = dx / norm
-                dy = dy / norm
-            # Appliquer le facteur de correction pour équilibrer avec le système d'accélération du joueur
-            corrected_speed = self.speed * self.config.ENEMY_SPEED_CORRECTION_FACTOR
-            # Déplacer l'ennemi
-            self.x += dx * corrected_speed
-            self.y += dy * corrected_speed
+        # Comportement spécial pour l'ennemi tireur (sprite 14)
+        if self.is_shooter:
+            # Gestion du timer de tir
+            self.fire_timer += 1
+            
+            # L'ennemi s'arrête quand il atteint la distance de tir
+            if distance <= self.config.SHOOTER_ENEMY_STOP_DISTANCE:
+                self.is_stationary = True
+            else:
+                self.is_stationary = False
+            
+            # Si l'ennemi n'est pas encore à distance de tir, il se rapproche
+            if not self.is_stationary and distance > 0:
+                # Normaliser et ajouter composante aléatoire
+                dx = (dx / distance) + self.random_offset_x
+                dy = (dy / distance) + self.random_offset_y
+                # Normalisation pour vitesse constante
+                norm = math.sqrt(dx**2 + dy**2)
+                if norm > 0:
+                    dx = dx / norm
+                    dy = dy / norm
+                # Appliquer le facteur de correction
+                corrected_speed = self.speed * self.config.ENEMY_SPEED_CORRECTION_FACTOR
+                # Déplacer l'ennemi
+                self.x += dx * corrected_speed
+                self.y += dy * corrected_speed
+        else:
+            # Comportement normal pour les autres ennemis
+            if distance > 0:
+                # Normaliser et ajouter composante aléatoire
+                dx = (dx / distance) + self.random_offset_x
+                dy = (dy / distance) + self.random_offset_y
+                # Normalisation pour vitesse constante
+                norm = math.sqrt(dx**2 + dy**2)
+                if norm > 0:
+                    dx = dx / norm
+                    dy = dy / norm
+                # Appliquer le facteur de correction pour équilibrer avec le système d'accélération du joueur
+                corrected_speed = self.speed * self.config.ENEMY_SPEED_CORRECTION_FACTOR
+                # Déplacer l'ennemi
+                self.x += dx * corrected_speed
+                self.y += dy * corrected_speed
+    
+    def should_fire(self):
+        """Vérifie si l'ennemi tireur doit tirer un projectile"""
+        if not self.is_shooter or not self.is_stationary:
+            return False
+        
+        # Tirer selon la fréquence configurée
+        if self.fire_timer >= self.config.SHOOTER_ENEMY_FIRE_RATE:
+            self.fire_timer = 0
+            return True
+        return False
     
     def take_damage(self, damage):
         """Fait subir des dégâts à l'ennemi"""
         self.health = max(0, self.health - damage)
     
-    def draw(self, screen, camera_x=0, camera_y=0):
-        """Dessine l'ennemi avec animation de rotation"""
-        if self.sprite:
-            # Appliquer la rotation au sprite
-            rotated_sprite = pygame.transform.rotate(self.sprite, self.rotation_angle)
-            
-            # Calculer la nouvelle position pour centrer le sprite tourné
-            rotated_rect = rotated_sprite.get_rect()
-            sprite_center_x = self.x + self.size // 2
-            sprite_center_y = self.y + self.size // 2
-            rotated_rect.center = (sprite_center_x, sprite_center_y)
-            
-            # Dessiner le sprite tourné
-            screen.blit(rotated_sprite, rotated_rect)
-        else:
-            # Fallback : dessiner des carrés colorés si les sprites ne sont pas chargés
-            enemy_color = self.config.ENEMY_COLOR  # Couleur normale pour tous les ennemis
-            
-            # Corps principal avec antialiasing si activé
-            if self.config.ENABLE_ANTIALIASING:
-                # Utiliser un rectangle avec antialiasing (approximation avec gfxdraw)
-                points = [
-                    (int(self.x), int(self.y)),
-                    (int(self.x + self.size), int(self.y)),
-                    (int(self.x + self.size), int(self.y + self.size)),
-                    (int(self.x), int(self.y + self.size))
-                ]
-                pygame.gfxdraw.filled_polygon(screen, points, enemy_color)
-                pygame.gfxdraw.aapolygon(screen, points, enemy_color)
-                
-                # Contour blanc avec antialiasing (plus épais pour les ennemis spéciaux)
-                border_width = 3 if self.is_special else 2
-                for i in range(border_width):
-                    border_points = [
-                        (int(self.x - i), int(self.y - i)),
-                        (int(self.x + self.size + i), int(self.y - i)),
-                        (int(self.x + self.size + i), int(self.y + self.size + i)),
-                        (int(self.x - i), int(self.y + self.size + i))
-                    ]
-                    pygame.gfxdraw.aapolygon(screen, border_points, self.config.WHITE)
-            else:
-                # Rendu normal sans antialiasing
-                pygame.draw.rect(screen, enemy_color,
-                                (int(self.x), int(self.y), self.size, self.size))
-                
-                # Contour blanc (plus épais pour les ennemis spéciaux)
-                border_width = 3 if self.is_special else 2
-                pygame.draw.rect(screen, self.config.WHITE,
-                                (int(self.x), int(self.y), self.size, self.size), border_width)
-            
-            # Effet scintillant pour les ennemis spéciaux (inchangé)
-            if self.is_special:
-                pulse = int(50 * (1 + math.sin(pygame.time.get_ticks() * 0.01)))
-                glow_color = (255, 255, 255, pulse)
-                glow_rect = pygame.Rect(self.x - 2, self.y - 2, self.size + 4, self.size + 4)
-                if self.config.ENABLE_ANTIALIASING:
-                    # Contour avec antialiasing pour l'effet de scintillement
-                    glow_points = [
-                        (int(self.x - 2), int(self.y - 2)),
-                        (int(self.x + self.size + 2), int(self.y - 2)),
-                        (int(self.x + self.size + 2), int(self.y + self.size + 2)),
-                        (int(self.x - 2), int(self.y + self.size + 2))
-                    ]
-                    pygame.gfxdraw.aapolygon(screen, glow_points, self.config.WHITE)
-                else:
-                    pygame.draw.rect(screen, self.config.WHITE, glow_rect, 1)
-        
-        # Barre de santé si endommagé (au-dessus du sprite)
-        if self.health < self.max_health:
-            health_ratio = self.health / self.max_health
-            bar_width = self.size
-            bar_height = 4
-            
-            # Fond rouge
-            pygame.draw.rect(screen, self.config.RED,
-                           (int(self.x), int(self.y - 8), bar_width, bar_height))
-            
-            # Santé actuelle
-            current_width = int(bar_width * health_ratio)
-            pygame.draw.rect(screen, self.config.GREEN,
-                           (int(self.x), int(self.y - 8), current_width, bar_height))
-
-
-class Enemy:
-    """Classe des ennemis avec IA de poursuite"""
-    
-    # Variables de classe pour les sprites (chargés une seule fois)
-    sprites = None
-    sprites_loaded = False
-    
-    @classmethod
-    def load_sprites(cls):
-        """Charge tous les sprites d'ennemis une seule fois"""
-        if not cls.sprites_loaded:
-            cls.sprites = {}
-            try:
-                # Charger les sprites 1.png à 5.png
-                for i in range(1, 24):
-                    sprite_path = f"assets/Enemy/{i}.png"
-                    sprite = pygame.image.load(sprite_path).convert_alpha()
-                    # Les sprites sont maintenant redimensionnés selon le preset actuel
-                    # La taille sera définie lors de l'initialisation de l'ennemi
-                    cls.sprites[i] = sprite  # Garder le sprite original pour le redimensionner plus tard
-                cls.sprites_loaded = True
-                print(f"{len(cls.sprites)} sprites d'ennemis chargés (redimensionnement selon preset)")
-            except Exception as e:
-                print(f"Erreur lors du chargement des sprites: {e}")
-                cls.sprites = {}
-                cls.sprites_loaded = True
-    
-    def __init__(self, x, y, config, is_special=False, wave_number=1):
-        # Charger les sprites si ce n'est pas déjà fait
-        if not Enemy.sprites_loaded:
-            Enemy.load_sprites()
-        
-        self.x = x
-        self.y = y
-        self.config = config
-        self.size = config.ENEMY_SIZE
-        self.speed = config.ENEMY_SPEED
-        
-        # Choisir un sprite aléatoire pour cet ennemi et le redimensionner à la bonne taille
-        if Enemy.sprites:
-            self.sprite_id = random.choice(list(Enemy.sprites.keys()))
-            # Redimensionner le sprite original à la taille définie dans le preset avec antialiasing
-            original_sprite = Enemy.sprites[self.sprite_id]
-            if config.SPRITE_SMOOTHING:
-                self.sprite = pygame.transform.smoothscale(original_sprite, (self.size, self.size))
-            else:
-                self.sprite = pygame.transform.scale(original_sprite, (self.size, self.size))
-            # Optimiser le format pour un rendu plus rapide
-            self.sprite = self.sprite.convert_alpha()
-        else:
-            self.sprite_id = None
-            self.sprite = None
-        
-        # Calcul des points de vie selon la vague et le type d'ennemi
-        base_health = config.ENEMY_HEALTH
-        wave_bonus = (wave_number - 1)  # Vague 1 = +0, Vague 2 = +1, etc.
-        
-        # Ennemi spécial
-        self.is_special = is_special
-        if is_special:
-            # Points de vie spéciaux avec progression par vague
-            special_wave_bonus = wave_bonus * config.SPECIAL_ENEMY_HEALTH_INCREASE_PER_WAVE
-            self.max_health = int((base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE) * config.SPECIAL_ENEMY_HEALTH_MULTIPLIER + special_wave_bonus)
-            self.bonus_type = random.choice(config.BONUS_TYPES)
-            # Taille x2 pour les ennemis spéciaux
-            self.size = config.ENEMY_SIZE * 2
-            # Redimensionner le sprite à la nouvelle taille avec antialiasing
-            if self.sprite:
-                if config.SPRITE_SMOOTHING:
-                    self.sprite = pygame.transform.smoothscale(Enemy.sprites[self.sprite_id], (self.size, self.size))
-                else:
-                    self.sprite = pygame.transform.scale(Enemy.sprites[self.sprite_id], (self.size, self.size))
-                # Optimiser le format
-                self.sprite = self.sprite.convert_alpha()
-        else:
-            # Points de vie normaux avec progression par vague
-            self.max_health = base_health + wave_bonus * config.ENEMY_HEALTH_INCREASE_PER_WAVE
-            self.bonus_type = None
-            
-        self.health = self.max_health
-        
-        # Animation de rotation (ping-pong de -5° à +5° accéléré)
-        self.rotation_angle = 0
-        self.rotation_time = 0
-        self.rotation_speed = 5  # Vitesse de rotation accélérée (20 au lieu de 10)
-        
-        # Composante aléatoire pour l'IA
-        self.random_offset_x = 0
-        self.random_offset_y = 0
-        self.random_timer = 0
-    
-    def update(self, player_x, player_y):
-        """Met à jour la position de l'ennemi (suit le joueur)"""
-        # Mise à jour de l'animation de rotation accélérée avec rotation_speed
-        dt = 1.0 / 60.0  # Delta time assumant 60 FPS
-        self.rotation_time += dt * self.rotation_speed  # Utiliser rotation_speed pour accélérer
-        
-        # Calculer l'angle de rotation en ping-pong (-5° à +5°)
-        # La vitesse est maintenant contrôlée par rotation_speed
-        self.rotation_angle = 5 * math.sin(self.rotation_time * math.pi)
-        
-        # Mise à jour du mouvement aléatoire
-        self.random_timer += 1
-        if self.random_timer >= 30:  # Change de direction toutes les 0.5 secondes
-            self.random_offset_x = random.uniform(-0.5, 0.5)
-            self.random_offset_y = random.uniform(-0.5, 0.5)
-            self.random_timer = 0
-        
-        # Direction vers le joueur
-        dx = player_x - (self.x + self.size//2)
-        dy = player_y - (self.y + self.size//2)
-        distance = math.sqrt(dx**2 + dy**2)
-        
-        if distance > 0:
-            # Normaliser et ajouter composante aléatoire
-            dx = (dx / distance) + self.random_offset_x
-            dy = (dy / distance) + self.random_offset_y
-            # Normalisation pour vitesse constante
-            norm = math.sqrt(dx**2 + dy**2)
-            if norm > 0:
-                dx = dx / norm
-                dy = dy / norm
-            # Appliquer le facteur de correction pour équilibrer avec le système d'accélération du joueur
-            corrected_speed = self.speed * self.config.ENEMY_SPEED_CORRECTION_FACTOR
-            # Déplacer l'ennemi
-            self.x += dx * corrected_speed
-            self.y += dy * corrected_speed
-    
-    def take_damage(self, damage):
-        """Fait subir des dégâts à l'ennemi"""
-        self.health = max(0, self.health - damage)
+    def set_death_type(self, death_type, **death_data):
+        """Définit le type de mort et les données associées"""
+        self.death_type = death_type
+        self.death_data = death_data
     
     def draw(self, screen, camera_x=0, camera_y=0):
         """Dessine l'ennemi avec animation de rotation"""
@@ -682,6 +519,44 @@ class Zap:
         # Point lumineux au centre
         pygame.draw.circle(screen, self.config.WHITE,
                          (int(self.x), int(self.y)), self.size)
+
+
+class EnemyProjectile:
+    """Classe des projectiles d'ennemis"""
+    
+    def __init__(self, x, y, target_x, target_y, config):
+        self.x = x
+        self.y = y
+        self.config = config
+        self.size = 6  # Taille du projectile
+        self.speed = config.SHOOTER_ENEMY_PROJECTILE_SPEED
+        self.damage = config.SHOOTER_ENEMY_PROJECTILE_DAMAGE
+        
+        # Calculer la direction vers la cible
+        dx = target_x - x
+        dy = target_y - y
+        distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance > 0:
+            self.dx = dx / distance
+            self.dy = dy / distance
+        else:
+            self.dx = 0
+            self.dy = 0
+    
+    def update(self):
+        """Met à jour la position du projectile"""
+        self.x += self.dx * self.speed
+        self.y += self.dy * self.speed
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine le projectile ennemi"""
+        screen_x = int(self.x - camera_x)
+        screen_y = int(self.y - camera_y)
+        
+        # Projectile rouge avec contour noir
+        pygame.draw.circle(screen, (255, 100, 100), (screen_x, screen_y), self.size)
+        pygame.draw.circle(screen, (100, 0, 0), (screen_x, screen_y), self.size, 2)
 
 
 class Lightning:
@@ -1199,8 +1074,9 @@ class Beam:
         self.end_x = self.center_x + math.cos(self.current_angle) * self.range
         self.end_y = self.center_y + math.sin(self.current_angle) * self.range
         
-        # Liste des ennemis déjà touchés pour éviter les dégâts multiples
-        self.hit_enemies = set()
+        # Timer pour les dégâts continus (toutes les 10 frames = ~6 dégâts par seconde)
+        self.damage_timer = 0
+        self.damage_interval = 10  # Appliquer les dégâts toutes les 10 frames
         
         # Timer pour la génération continue de particules
         self.particle_timer = 0
@@ -1209,6 +1085,7 @@ class Beam:
         """Met à jour le faisceau avec rotation antihoraire"""
         self.current_life -= 1
         self.particle_timer += 1  # Incrémenter le timer des particules
+        self.damage_timer += 1  # Incrémenter le timer des dégâts
         
         # Mettre à jour la position du centre avec le joueur
         if self.player:
@@ -1229,7 +1106,7 @@ class Beam:
         return self.current_life > 0
     
     def check_collision_with_enemies(self, enemies, game=None):
-        """Vérifie les collisions avec les ennemis et applique les dégâts"""
+        """Vérifie les collisions avec les ennemis et applique les dégâts continus"""
         hit_positions = []
         continuous_hits = []  # Pour les particules continues
         
@@ -1256,15 +1133,17 @@ class Beam:
                                                  current_direction_x, 
                                                  current_direction_y)
                 
-                # Appliquer les dégâts seulement une fois par ennemi
-                if id(enemy) not in self.hit_enemies:
+                # Appliquer les dégâts continus à intervalles réguliers
+                if self.damage_timer % self.damage_interval == 0:
                     enemy_was_alive = enemy.health > 0
                     enemy.take_damage(self.damage)
-                    self.hit_enemies.add(id(enemy))
                     
-                    # Si l'ennemi est éliminé, créer une explosion renforcée
+                    # Si l'ennemi est éliminé, créer une explosion renforcée et l'effet de désintégration
                     if enemy_was_alive and enemy.health <= 0 and game:
                         game.create_beam_explosion_particles(impact_x, impact_y)
+                        # Créer l'effet de désintégration en cendres
+                        beam_death_effect = BeamDeathEffect(enemy, self.config)
+                        game.beam_death_effects.append(beam_death_effect)
                 
                 hit_positions.append((impact_x, impact_y))
                 continuous_hits.append((impact_x, impact_y))
@@ -1553,3 +1432,199 @@ class Heart(Collectible):
             print(f"💚 Coeur collecté ! +{healed} points de vie (vie: {player.health}/{player.max_health})")
         else:
             print(f"💚 Coeur collecté mais vie déjà au maximum ({player.health}/{player.max_health})")
+
+
+class OrbDeathEffect:
+    """Effet de mort par orbe : repousse et fade rouge"""
+    
+    def __init__(self, enemy, orb_direction_x, orb_direction_y, config):
+        self.config = config
+        self.original_x = enemy.x
+        self.original_y = enemy.y
+        self.size = enemy.size
+        self.sprite = enemy.sprite
+        
+        # Direction de repousse (normalisée)
+        magnitude = math.sqrt(orb_direction_x**2 + orb_direction_y**2)
+        if magnitude > 0:
+            self.push_x = (orb_direction_x / magnitude) * config.ORB_DEATH_PUSHBACK_DISTANCE
+            self.push_y = (orb_direction_y / magnitude) * config.ORB_DEATH_PUSHBACK_DISTANCE
+        else:
+            self.push_x = 0
+            self.push_y = 0
+        
+        # Position finale après repousse
+        self.target_x = self.original_x + self.push_x
+        self.target_y = self.original_y + self.push_y
+        
+        # État de l'animation
+        self.current_life = config.ORB_DEATH_FADE_DURATION
+        self.max_life = config.ORB_DEATH_FADE_DURATION
+        
+        # Position actuelle
+        self.x = self.original_x
+        self.y = self.original_y
+    
+    def update(self):
+        """Met à jour l'effet de mort"""
+        self.current_life -= 1
+        
+        # Progression de l'animation (0.0 à 1.0)
+        progress = 1.0 - (self.current_life / self.max_life)
+        
+        # Interpolation de la position (repousse)
+        self.x = self.original_x + self.push_x * progress
+        self.y = self.original_y + self.push_y * progress
+        
+        return self.current_life > 0
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine l'effet de mort avec fade et teinte rouge"""
+        screen_x = int(self.x - camera_x)
+        screen_y = int(self.y - camera_y)
+        
+        # Calcul de l'alpha pour le fade
+        alpha = int(255 * (self.current_life / self.max_life))
+        
+        if self.sprite and self.config.SPRITE_SMOOTHING:
+            # Créer une surface temporaire avec teinte rouge et fade
+            temp_surface = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+            temp_surface.blit(self.sprite, (0, 0))
+            
+            # Appliquer la teinte rouge
+            red_overlay = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+            red_overlay.fill((*self.config.ORB_DEATH_COLOR_TINT, 128))  # 50% de rouge
+            temp_surface.blit(red_overlay, (0, 0), special_flags=pygame.BLEND_MULT)
+            
+            # Appliquer l'alpha
+            temp_surface.set_alpha(alpha)
+            
+            screen.blit(temp_surface, (screen_x, screen_y))
+        else:
+            # Rendu de fallback avec rectangle rouge qui fade
+            rect_color = (*self.config.ORB_DEATH_COLOR_TINT, alpha)
+            temp_surface = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+            temp_surface.fill(rect_color)
+            screen.blit(temp_surface, (screen_x, screen_y))
+
+
+class BeamDeathEffect:
+    """Effet de mort par beam : désintégration en cendres du sprite réel"""
+    
+    def __init__(self, enemy, config):
+        self.config = config
+        self.x = enemy.x
+        self.y = enemy.y
+        self.size = enemy.size
+        self.sprite = enemy.sprite
+        
+        # Générer les particules de cendres à partir des pixels du sprite
+        self.ash_particles = []
+        self._generate_ash_from_sprite()
+    
+    def _generate_ash_from_sprite(self):
+        """Génère les particules de cendres à partir des pixels du sprite de l'ennemi"""
+        if not self.sprite:
+            return
+        
+        # Créer un masque noir du sprite
+        sprite_rect = self.sprite.get_rect()
+        
+        # Échantillonner les pixels du sprite (pas tous pour éviter trop de particules)
+        sample_rate = max(1, self.size // 16)  # Échantillonner 1 pixel sur N
+        
+        try:
+            # Obtenir les données de pixels du sprite
+            sprite_array = pygame.surfarray.array3d(self.sprite)
+            
+            for x in range(0, sprite_rect.width, sample_rate):
+                for y in range(0, sprite_rect.height, sample_rate):
+                    if x < sprite_array.shape[0] and y < sprite_array.shape[1]:
+                        # Vérifier si le pixel n'est pas transparent
+                        pixel_color = sprite_array[x, y]
+                        # Si le pixel a une couleur (pas transparent), créer une particule de cendre
+                        if not (pixel_color[0] == 0 and pixel_color[1] == 0 and pixel_color[2] == 0):
+                            # Position absolue de la particule
+                            world_x = self.x + (x * self.size) // sprite_rect.width
+                            world_y = self.y + (y * self.size) // sprite_rect.height
+                            
+                            particle = {
+                                'x': float(world_x),
+                                'y': float(world_y),
+                                'vel_x': random.uniform(-0.8, 0.8),  # Légère dérive horizontale
+                                'vel_y': random.uniform(0.5, 2.0),   # Vitesse de chute variable
+                                'size': random.randint(2, 4),        # Particules plus grosses pour meilleure visibilité
+                                'life': random.randint(60, 120),     # Durée de vie variable
+                                'max_life': 120,
+                                'color': (40, 40, 40)  # Gris très foncé (cendres)
+                            }
+                            self.ash_particles.append(particle)
+        except Exception:
+            # Si l'extraction des pixels échoue, utiliser l'ancienne méthode
+            self._generate_fallback_ash()
+    
+    def _generate_fallback_ash(self):
+        """Méthode de secours si l'extraction des pixels échoue"""
+        particle_count = self.config.BEAM_DEATH_ASH_COUNT
+        
+        for _ in range(particle_count):
+            # Position aléatoire dans la zone de l'ennemi
+            offset_x = random.uniform(-self.size/2, self.size/2)
+            offset_y = random.uniform(-self.size/2, self.size/2)
+            
+            particle = {
+                'x': self.x + self.size/2 + offset_x,
+                'y': self.y + self.size/2 + offset_y,
+                'vel_x': random.uniform(-0.5, 0.5),
+                'vel_y': random.uniform(0.5, 2.0),
+                'size': random.randint(3, 5),  # Particules plus grosses pour la méthode de secours
+                'life': random.randint(60, 120),
+                'max_life': 120,
+                'color': (40, 40, 40)
+            }
+            self.ash_particles.append(particle)
+    
+    def update(self):
+        """Met à jour les particules de cendres"""
+        active_particles = []
+        
+        for particle in self.ash_particles:
+            # Mise à jour de la position
+            particle['x'] += particle['vel_x']
+            particle['y'] += particle['vel_y']
+            
+            # Gravité légère pour un effet réaliste
+            particle['vel_y'] += 0.08
+            
+            # Diminuer la durée de vie
+            particle['life'] -= 1
+            
+            # Garder seulement les particules vivantes
+            if particle['life'] > 0:
+                active_particles.append(particle)
+        
+        self.ash_particles = active_particles
+        return len(self.ash_particles) > 0
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine les particules de cendres"""
+        for particle in self.ash_particles:
+            screen_x = int(particle['x'] - camera_x)
+            screen_y = int(particle['y'] - camera_y)
+            
+            # Alpha basé sur la durée de vie restante pour effet de disparition
+            alpha = int(255 * (particle['life'] / particle['max_life']))
+            
+            # Couleur des cendres avec transparence
+            color = particle['color'] + (alpha,)
+            
+            # Dessiner la particule de cendre
+            if alpha > 0 and particle['size'] > 0:
+                try:
+                    temp_surface = pygame.Surface((particle['size'], particle['size']), pygame.SRCALPHA)
+                    temp_surface.fill(color)
+                    screen.blit(temp_surface, (screen_x, screen_y))
+                except Exception:
+                    # Si le dessin échoue, utiliser un point simple
+                    pygame.draw.rect(screen, particle['color'], 
+                                   (screen_x, screen_y, particle['size'], particle['size']))

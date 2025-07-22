@@ -2,7 +2,7 @@ import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart
+from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
 from background import Background
 from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill
 
@@ -29,7 +29,7 @@ class Game:
         # === CURSEUR PERSONNALISÉ ===
         try:
             # Charger l'image du curseur
-            cursor_image = pygame.image.load("assets/player/pointer.png").convert_alpha()
+            cursor_image = pygame.image.load("assets/player/pointer2.png").convert_alpha()
             # Redimensionner si nécessaire (2x plus gros que la taille de base)
             cursor_size = max(48, int(48 * self.config.font_scale))  # Taille adaptative x2
             cursor_image = pygame.transform.scale(cursor_image, (cursor_size, cursor_size))
@@ -62,12 +62,15 @@ class Game:
         )
         self.enemies = []
         self.zaps = []
+        self.enemy_projectiles = []  # Nouvelle liste pour les projectiles d'ennemis
         self.lightnings = []  # Nouvelle liste pour les éclairs
         self.beams = []       # Nouvelle liste pour les rayons laser
         self.particles = []   # Nouvelle liste pour les particules
         self.welding_particles = []  # Nouvelle liste pour les particules de soudure du Beam
         self.energy_orbs = []  # Nouvelle liste pour les boules d'énergie
         self.death_effects = []  # Nouvelle liste pour les effets de mort
+        self.orb_death_effects = []  # Nouvelle liste pour les effets de mort par orbe
+        self.beam_death_effects = []  # Nouvelle liste pour les effets de mort par beam
         self.collectibles = []  # Nouvelle liste pour les objets collectibles
         
         # Gestion des vagues d'ennemis
@@ -118,9 +121,32 @@ class Game:
         
         # === STATISTIQUES DE JEU ===
         self.game_start_time = pygame.time.get_ticks()  # Temps de début en millisecondes
+        self.game_end_time = None  # Temps de fin (survie) en millisecondes
         self.enemies_killed = 0  # Nombre d'ennemis tués
         self.max_level_reached = 1  # Niveau maximum atteint
     
+    def trigger_game_over(self):
+        """Déclenche la fin de partie et enregistre le temps de survie"""
+        if not self.game_over:  # Éviter de redéclencher
+            self.game_over = True
+            self.game_end_time = pygame.time.get_ticks()
+            print(f"💀 GAME OVER - Temps de survie: {self.get_survival_time_string()}")
+    
+    def get_survival_time_ms(self):
+        """Retourne le temps de survie en millisecondes"""
+        if self.game_end_time is not None:
+            return self.game_end_time - self.game_start_time
+        else:
+            # Si le jeu n'est pas fini, retourner le temps actuel
+            return pygame.time.get_ticks() - self.game_start_time
+    
+    def get_survival_time_string(self):
+        """Retourne le temps de survie formaté en mm:ss"""
+        survival_time_ms = self.get_survival_time_ms()
+        minutes = survival_time_ms // 60000
+        seconds = (survival_time_ms % 60000) // 1000
+        return f"{minutes:02d}:{seconds:02d}"
+
     def handle_events(self):
         """Gère les événements pygame"""
         for event in pygame.event.get():
@@ -321,13 +347,24 @@ class Game:
             # Restaurer la vitesse originale
             enemy.speed = original_speed
             
+            # Vérifier si l'ennemi tireur doit tirer un projectile
+            if enemy.should_fire():
+                projectile = EnemyProjectile(
+                    enemy.x + enemy.size // 2,
+                    enemy.y + enemy.size // 2,
+                    self.player.x + self.player.size // 2,
+                    self.player.y + self.player.size // 2,
+                    self.config
+                )
+                self.enemy_projectiles.append(projectile)
+            
             # Collision avec le joueur
             if self.check_collision(self.player, enemy):
                 # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
                 if self.bonus_manager.can_take_damage():
                     self.player.take_damage(self.config.ENEMY_DAMAGE)
                     if self.player.health <= 0:
-                        self.game_over = True
+                        self.trigger_game_over()
                         break
         
         # Nouveau système d'armes orienté objet
@@ -476,12 +513,6 @@ class Game:
         self.config.SCREEN_WIDTH = new_width
         self.config.SCREEN_HEIGHT = new_height
         
-        # Recalculer les éléments adaptatifs
-        self.config.recalculate_adaptive_sizes()
-        
-        # Recréer la surface d'affichage
-        self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
-        
         # Recalculer les polices avec la nouvelle échelle
         self.font = pygame.font.Font(None, int(36 * self.config.font_scale))
         self.small_font = pygame.font.Font(None, int(24 * self.config.font_scale))
@@ -492,10 +523,8 @@ class Game:
         self.camera_x -= camera_offset_x
         self.camera_y -= camera_offset_y
         
-        # Recreer les orb avec les nouvelles dimensions
-        if hasattr(self, 'energy_orbs') and self.energy_orbs:
-            self.energy_orbs.clear()
-            self.recreate_all_energy_orbs()
+        # Les orb sont maintenant gérées par le système OOP de WeaponManager
+        # Plus besoin de les recréer manuellement
         
         print(f"Fenêtre redimensionnée: {new_width}x{new_height}")
     
@@ -628,61 +657,83 @@ class Game:
                     self.enemies_killed += 1  # Incrémenter les statistiques
                 self.score += self.config.SCORE_PER_LIGHTNING_KILL  # Plus de points pour les lightning
     
+    def create_particles(self, x, y, particle_type="explosion", multiplier=1.0, beam_direction=None):
+        """
+        Méthode unifiée pour créer différents types de particules
+        
+        Args:
+            x, y: Position
+            particle_type: "explosion", "lightning", "welding", "beam_explosion"
+            multiplier: Multiplicateur du nombre de particules
+            beam_direction: Tuple (dx, dy) pour les particules de soudure
+        """
+        if particle_type == "lightning":
+            # Triple le nombre de particules pour un effet spectaculaire
+            count = int(self.config.PARTICLE_COUNT * 3 * multiplier)
+            for _ in range(count):
+                particle = Particle(x, y, self.config)
+                # Effet électrique avec particules plus grosses
+                particle.vel_x *= random.uniform(1.2, 2.0)
+                particle.vel_y *= random.uniform(1.2, 2.0)
+                particle.color = random.choice([
+                    (255, 255, 255), (200, 200, 255), (255, 255, 200), (150, 150, 255)
+                ])
+                # Particules un peu plus grosses pour le lightning (x1.5 à x2)
+                particle.size = random.randint(int(self.config.PARTICLE_SIZE * 1.5), self.config.PARTICLE_SIZE * 2)
+                particle.lifetime = int(particle.lifetime * random.uniform(1.2, 1.8))
+                particle.current_life = particle.lifetime
+                self.particles.append(particle)
+                
+        elif particle_type == "welding":
+            # Particules de soudure spécialisées
+            base_count = max(4, self.config.PARTICLE_COUNT // 2)
+            count = int(base_count * multiplier)
+            
+            beam_dir_x, beam_dir_y = beam_direction if beam_direction else (None, None)
+            
+            for _ in range(count):
+                particle = WeldingParticle(x, y, self.config, beam_dir_x, beam_dir_y)
+                self.welding_particles.append(particle)
+            
+            # Particules ultra-brillantes
+            for _ in range(max(1, count // 4)):
+                particle = WeldingParticle(x, y, self.config, beam_dir_x, beam_dir_y)
+                particle.color = (255, 255, 255)
+                particle.size = 1
+                particle.lifetime = random.randint(15, 30)
+                particle.current_life = particle.lifetime
+                self.welding_particles.append(particle)
+                
+        elif particle_type == "beam_explosion":
+            # Double explosion pour beam
+            count = int(self.config.PARTICLE_COUNT * 2 * multiplier)
+            for _ in range(count):
+                particle = Particle(x, y, self.config)
+                self.particles.append(particle)
+                
+        else:  # particle_type == "explosion" ou par défaut
+            # Explosion normale
+            count = int(self.config.PARTICLE_COUNT * multiplier)
+            for _ in range(count):
+                particle = Particle(x, y, self.config)
+                self.particles.append(particle)
+    
+    # Méthodes legacy conservées pour compatibilité
     def create_explosion_particles(self, x, y):
         """Crée des particules d'explosion à la position donnée"""
-        for _ in range(self.config.PARTICLE_COUNT):
-            particle = Particle(x, y, self.config)
-            self.particles.append(particle)
+        self.create_particles(x, y, "explosion")
     
     def create_lightning_explosion_particles(self, x, y):
-        """Crée une explosion renforcée spécifique au Lightning (3x plus de particules)"""
-        # Triple le nombre de particules pour un effet spectaculaire
-        for _ in range(self.config.PARTICLE_COUNT * 3):
-            particle = Particle(x, y, self.config)
-            # Modifier les propriétés pour un effet plus électrique
-            particle.vel_x *= random.uniform(1.2, 2.0)  # Plus de vitesse
-            particle.vel_y *= random.uniform(1.2, 2.0)
-            particle.color = random.choice([
-                (255, 255, 255),  # Blanc électrique
-                (200, 200, 255),  # Bleu clair
-                (255, 255, 200),  # Jaune électrique
-                (150, 150, 255)   # Bleu électrique
-            ])
-            particle.lifetime = int(particle.lifetime * random.uniform(1.2, 1.8))  # Durée plus longue
-            particle.current_life = particle.lifetime
-            self.particles.append(particle)
+        """Crée une explosion renforcée spécifique au Lightning"""
+        self.create_particles(x, y, "lightning")
     
     def create_welding_particles(self, x, y, beam_direction_x=None, beam_direction_y=None):
         """Crée des particules de soudure au point d'impact du Beam"""
-        # Nombre réduit de particules pour un effet plus réaliste
-        base_count = max(4, self.config.PARTICLE_COUNT // 2)  # Réduits de moitié
-        particle_count = base_count  # Plus de doublement
-        
-        for _ in range(particle_count):
-            particle = WeldingParticle(x, y, self.config, beam_direction_x, beam_direction_y)
-            self.welding_particles.append(particle)
-        
-        # Quelques particules supplémentaires ultra-brillantes (réduites)
-        for _ in range(max(1, particle_count // 4)):  # Beaucoup moins de particules bonus
-            particle = WeldingParticle(x, y, self.config, beam_direction_x, beam_direction_y)
-            # Rendre ces particules encore plus brillantes mais plus petites
-            particle.color = (255, 255, 255)  # Blanc pur
-            particle.size = 1  # Très petites
-            particle.lifetime = random.randint(15, 30)  # Durée normale
-            particle.current_life = particle.lifetime
-            self.welding_particles.append(particle)
+        self.create_particles(x, y, "welding", beam_direction=(beam_direction_x, beam_direction_y))
     
     def create_beam_explosion_particles(self, x, y):
-        """Crée une explosion renforcée quand un ennemi est tué par un Beam (x2 particules)"""
-        # Explosion normale
-        for _ in range(self.config.PARTICLE_COUNT):
-            particle = Particle(x, y, self.config)
-            self.particles.append(particle)
-        
-        # Explosion supplémentaire (double effet)
-        for _ in range(self.config.PARTICLE_COUNT):
-            particle = Particle(x, y, self.config)
-            self.particles.append(particle)
+        """Crée une explosion renforcée quand un ennemi est tué par un Beam"""
+        self.create_particles(x, y, "beam_explosion")
     
     def handle_enemy_drops(self, enemy):
         """Gère les drops d'objets collectibles quand un ennemi meurt"""
@@ -793,13 +844,39 @@ class Game:
         # TOUJOURS faire le flip pour afficher à l'écran
         pygame.display.flip()
 
+    def draw_button(self, text, rect, color, text_color=None, border_radius=14):
+        """
+        Méthode helper pour dessiner un bouton standardisé
+        
+        Args:
+            text: Texte du bouton
+            rect: Rectangle pygame.Rect
+            color: Couleur de fond du bouton
+            text_color: Couleur du texte (blanc par défaut)
+            border_radius: Rayon des coins arrondis
+        """
+        if text_color is None:
+            text_color = self.config.WHITE
+            
+        pygame.draw.rect(self.screen, color, rect, border_radius=border_radius)
+        text_surface = self.font.render(text, True, text_color)
+        text_rect = text_surface.get_rect(center=rect.center)
+        self.screen.blit(text_surface, text_rect)
+    
+    def draw_overlay_background(self, alpha=160, color=(20, 20, 20)):
+        """Dessine un overlay semi-transparent pour les menus"""
+        screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
+        overlay = pygame.Surface((screen_w, screen_h))
+        overlay.set_alpha(alpha)
+        overlay.fill(color)
+        self.screen.blit(overlay, (0, 0))
+
     def draw_exit_menu(self):
         """Dessine le menu de sortie avec boutons cliquables"""
         screen_w, screen_h = self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT
-        overlay = pygame.Surface((screen_w, screen_h))
-        overlay.set_alpha(160)
-        overlay.fill((20, 20, 20))
-        self.screen.blit(overlay, (0, 0))
+        
+        # Background overlay
+        self.draw_overlay_background()
 
         # Titre
         title = "Menu de sortie"
@@ -807,23 +884,24 @@ class Game:
         title_rect = title_surface.get_rect(center=(screen_w//2, screen_h//2 - 120))
         self.screen.blit(title_surface, title_rect)
 
-        # Boutons
+        # Boutons avec helper
         btn_w, btn_h = 220, 60
         btn_margin = 40
-        btn_names = ["QUIT", "RESTART", "OPTION"]
+        btn_configs = [
+            ("QUIT", (200, 60, 60)),
+            ("RESTART", (60, 200, 120)),
+            ("OPTION", (60, 120, 200))
+        ]
+        
         btn_rects = []
-        for i, name in enumerate(btn_names):
+        for i, (name, color) in enumerate(btn_configs):
             rect = pygame.Rect(
                 screen_w//2 - btn_w//2,
                 screen_h//2 - btn_h//2 + i*(btn_h + btn_margin),
                 btn_w, btn_h
             )
             btn_rects.append(rect)
-            color = (200, 60, 60) if name == "QUIT" else (60, 200, 120) if name == "RESTART" else (60, 120, 200)
-            pygame.draw.rect(self.screen, color, rect, border_radius=14)
-            text_surface = self.font.render(name, True, self.config.WHITE)
-            text_rect = text_surface.get_rect(center=rect.center)
-            self.screen.blit(text_surface, text_rect)
+            self.draw_button(name, rect, color)
 
         # Stocker les rects pour la détection dans handle_events
         self.exit_menu_btn_rects = btn_rects
@@ -894,13 +972,14 @@ class Game:
         score_rect.topright = (self.config.WINDOW_WIDTH - 10, 10)
         self.screen.blit(score_surface, score_rect)
         
-        # Compteur de cœurs sur le terrain
-        hearts_count = sum(1 for collectible in self.collectibles if isinstance(collectible, Heart))
-        hearts_text = f"Coeurs: {hearts_count}/{self.config.HEART_MAX_ON_FIELD}"
-        hearts_surface = self.font.render(hearts_text, True, self.config.GREEN)
-        hearts_rect = hearts_surface.get_rect()
-        hearts_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
-        self.screen.blit(hearts_surface, hearts_rect)
+        # Temps de survie en cours
+        survival_time = self.get_survival_time_string()
+        time_text = f"Time: {survival_time}"
+        time_surface = self.font.render(time_text, True, self.config.CYAN)
+        time_rect = time_surface.get_rect()
+        time_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
+        self.screen.blit(time_surface, time_rect)
+        self.screen.blit(time_surface, time_rect)
         
         # Indicateur "Always Skip" si activé
         if self.always_skip_mode:
@@ -968,12 +1047,10 @@ class Game:
         # === STATISTIQUES PRINCIPALES ===
         y_offset = 120
         
-        # Temps de jeu
-        game_time_ms = pygame.time.get_ticks() - self.game_start_time
-        minutes = game_time_ms // 60000
-        seconds = (game_time_ms % 60000) // 1000
-        time_text = f"Temps de jeu: {minutes:02d}:{seconds:02d}"
-        time_surface = self.small_font.render(time_text, True, self.config.WHITE)
+        # Temps de survie (arrêté au moment de la mort)
+        survival_time = self.get_survival_time_string()
+        time_text = f"Survival Time: {survival_time}"
+        time_surface = self.small_font.render(time_text, True, self.config.YELLOW)
         time_rect = time_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
         self.screen.blit(time_surface, time_rect)
         y_offset += 30
@@ -1078,6 +1155,7 @@ class Game:
         
         # === RÉINITIALISER LES STATISTIQUES ===
         self.game_start_time = pygame.time.get_ticks()
+        self.game_end_time = None  # Réinitialiser le temps de fin
         self.enemies_killed = 0
         self.max_level_reached = 1
         
@@ -1106,9 +1184,11 @@ class Game:
         self.welding_particles.clear()  # Nouveau
         self.energy_orbs.clear()  # Nouveau
         self.death_effects.clear()  # Nouveau - pour les effets de mort
+        self.orb_death_effects.clear()  # Nouveau - pour les effets de mort par orbe
+        self.beam_death_effects.clear()  # Nouveau - pour les effets de mort par beam
         
-        # Créer les orb initiales
-        self.recreate_all_energy_orbs()
+        # Les orb sont maintenant gérées automatiquement par le WeaponManager
+        # Plus besoin d'appel manuel
         
         # Réinitialiser le gestionnaire de bonus
         self.bonus_manager = BonusManager(self.config)
@@ -1146,11 +1226,6 @@ class Game:
         if orb_weapon:
             # Synchroniser la liste legacy avec les orbes OOP
             self.energy_orbs = orb_weapon.orbs
-    
-    def recreate_all_energy_orbs(self):
-        """Méthode legacy - maintenant gérée par OrbWeapon"""
-        # Cette méthode n'est plus nécessaire avec le système OOP
-        pass
     
     def draw_minimap(self):
         """Dessine une minimap en bas à droite de la fenêtre"""
@@ -1571,6 +1646,10 @@ class Game:
         for zap in self.zaps:
             self.draw_entity_with_camera_offset(zap, camera_x, camera_y)
         
+        # Dessiner les projectiles ennemis
+        for projectile in self.enemy_projectiles:
+            self.draw_entity_with_camera_offset(projectile, camera_x, camera_y)
+        
         # Dessiner les lightning (derrière le joueur)
         for lightning in self.lightnings:
             # Les lightning ont leurs propres coordonnées dans leurs points
@@ -1595,6 +1674,14 @@ class Game:
         # Dessiner les effets de mort (au premier plan, avant le joueur)
         for death_effect in self.death_effects:
             death_effect.draw(self.screen, camera_x, camera_y)
+        
+        # Dessiner les effets de mort par orbe
+        for orb_death_effect in self.orb_death_effects:
+            orb_death_effect.draw(self.screen, camera_x, camera_y)
+        
+        # Dessiner les effets de mort par beam (cendres)
+        for beam_death_effect in self.beam_death_effects:
+            beam_death_effect.draw(self.screen, camera_x, camera_y)
         
         # Dessiner les collectibles (coeurs, etc.)
         for collectible in self.collectibles:
@@ -1655,6 +1742,35 @@ class Game:
             if zap in self.zaps:
                 self.zaps.remove(zap)
         
+        # Mettre à jour et gérer les collisions des projectiles ennemis
+        projectiles_to_remove = []
+        for projectile in self.enemy_projectiles:
+            projectile.update()
+            
+            # Vérifier si hors limites
+            if not (camera_bounds['left'] <= projectile.x <= camera_bounds['right'] and 
+                    camera_bounds['top'] <= projectile.y <= camera_bounds['bottom']):
+                projectiles_to_remove.append(projectile)
+                continue
+            
+            # Collision avec le joueur
+            if self.check_collision(projectile, self.player):
+                # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
+                if self.bonus_manager.can_take_damage():
+                    self.player.take_damage(projectile.damage)
+                    
+                    # Vérifier si le joueur est mort
+                    if self.player.health <= 0:
+                        self.player.health = 0
+                        self.trigger_game_over()
+                
+                projectiles_to_remove.append(projectile)
+        
+        # Supprimer les projectiles marqués pour suppression
+        for projectile in projectiles_to_remove:
+            if projectile in self.enemy_projectiles:
+                self.enemy_projectiles.remove(projectile)
+        
         # Nettoyer les éclairs (ils se suppriment automatiquement via update())
         self.lightnings = [lightning for lightning in self.lightnings if lightning.update()]
         
@@ -1670,6 +1786,30 @@ class Game:
                 active_beams.append(beam)
         self.beams = active_beams
         
+        # Supprimer les ennemis morts tués par les beams
+        enemies_to_remove = []
+        for enemy in self.enemies:
+            if enemy.health <= 0:
+                # Créer effet de mort pour les ennemis spéciaux
+                if enemy.is_special:
+                    death_effect = DeathEffect(enemy.x, enemy.y, self.config)
+                    self.death_effects.append(death_effect)
+                
+                # Appliquer bonus si c'est un ennemi spécial
+                if enemy.is_special and enemy.bonus_type:
+                    self.bonus_manager.apply_bonus(enemy.bonus_type, self)
+                
+                # Gérer les drops avant de supprimer l'ennemi
+                self.handle_enemy_drops(enemy)
+                enemies_to_remove.append(enemy)
+                self.enemies_killed += 1  # Incrémenter les statistiques
+                self.score += self.config.SCORE_PER_ENEMY_KILL
+        
+        # Supprimer les ennemis morts de la liste
+        for enemy in enemies_to_remove:
+            if enemy in self.enemies:
+                self.enemies.remove(enemy)
+        
         # Nettoyer les particules (elles se suppriment automatiquement via update())
         self.particles = [particle for particle in self.particles if particle.update()]
         
@@ -1681,6 +1821,16 @@ class Game:
             death_effect.update()
             if death_effect.is_finished:
                 self.death_effects.remove(death_effect)
+        
+        # Mettre à jour et nettoyer les effets de mort par orbe
+        for orb_death_effect in self.orb_death_effects[:]:
+            if not orb_death_effect.update():
+                self.orb_death_effects.remove(orb_death_effect)
+        
+        # Mettre à jour et nettoyer les effets de mort par beam
+        for beam_death_effect in self.beam_death_effects[:]:
+            if not beam_death_effect.update():
+                self.beam_death_effects.remove(beam_death_effect)
         
         # Nettoyer les orb et gérer leurs collisions
         player_center_x = self.player.x + self.player.size // 2
@@ -1705,6 +1855,14 @@ class Game:
                     self.particles.extend(impact_particles)
                     
                     if enemy.health <= 0:
+                        # Calculer la direction de l'orbe pour l'effet de repousse
+                        orb_direction_x = orb.x - player_center_x
+                        orb_direction_y = orb.y - player_center_y
+                        
+                        # Créer l'effet de mort par orbe (repousse et fade rouge)
+                        orb_death_effect = OrbDeathEffect(enemy, orb_direction_x, orb_direction_y, self.config)
+                        self.orb_death_effects.append(orb_death_effect)
+                        
                         # Créer effet de mort pour les ennemis spéciaux
                         if enemy.is_special:
                             death_effect = DeathEffect(enemy.x, enemy.y, self.config)

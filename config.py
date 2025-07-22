@@ -20,7 +20,6 @@ class Config:
         self.RED = (255, 0, 0)
         self.GREEN = (0, 255, 0)
         self.ORANGE = (255, 165, 0)
-        self.BLUE = (0, 100, 255)
         self.PURPLE = (128, 0, 128)
         
         # Couleurs spécifiques aux entités
@@ -51,6 +50,13 @@ class Config:
         # Progression des points de vie par vague
         self.ENEMY_HEALTH_INCREASE_PER_WAVE = 1  # +1 HP par vague pour ennemis normaux
         self.SPECIAL_ENEMY_HEALTH_INCREASE_PER_WAVE = 2  # +2 HP par vague pour ennemis spéciaux
+        
+        # Paramètres de l'ennemi tireur (sprite 14.png)
+        self.SHOOTER_ENEMY_SPRITE_ID = 15  # ID du sprite pour l'ennemi tireur
+        self.SHOOTER_ENEMY_STOP_DISTANCE = 600  # Distance à laquelle l'ennemi s'arrête pour tirer
+        self.SHOOTER_ENEMY_FIRE_RATE = 90  # Fréquence de tir (frames entre chaque tir)
+        self.SHOOTER_ENEMY_PROJECTILE_SPEED = 4.0  # Vitesse des projectiles
+        self.SHOOTER_ENEMY_PROJECTILE_DAMAGE = 15  # Dégâts des projectiles
     
     def detect_and_set_resolution(self, forced_screen_size=None):
         """Détecte la résolution d'écran et applique le preset approprié"""
@@ -279,11 +285,6 @@ class Config:
         self.ENERGY_ORB_COLOR = (138, 43, 226)
         self.ENERGY_ORB_GLOW_COLOR = (255, 0, 255)
         
-        # Types de bonus (identiques pour tous)
-        self.BONUS_TYPES = [
-            "damage_boost", "speed_boost", "shield", "lightning_boost", "orb_boost"
-        ]
-        
         # Paramètres des objets collectibles
         self.COLLECTIBLE_PICKUP_DISTANCE = 120  # Distance minimum pour attirer l'objet
         self.COLLECTIBLE_ATTRACTION_SPEED = 8  # Vitesse d'attraction vers le joueur
@@ -304,32 +305,6 @@ class Config:
         self.BONUS_TIME_SLOW_DURATION = 300
         self.BONUS_TIME_SLOW_FACTOR = 0.5
         self.BONUS_FREEZE_DURATION = 180
-        
-        # Pool d'upgrades (identique pour tous)
-        self.UPGRADE_POOL = [
-            {"id": "speed", "name": "Vitesse +20%", "description": "Augmente la vitesse de déplacement"},
-            {"id": "healing", "name": "Régénération", "description": "Récupère de la vie au fil du temps"},
-            {"id": "shield", "name": "Bouclier temporaire", "description": "Protection contre les dégâts"},
-            {"id": "magnet", "name": "Aimant", "description": "Attire les objets à distance"},
-            {"id": "zap_damage", "name": "Canon +30%", "description": "Le canon fait plus de dégâts"},
-            {"id": "zap_fire_rate", "name": "Cadence canon +40%", "description": "Tire plus rapidement"},
-            {"id": "zap_range", "name": "Portée canon +50%", "description": "Portée du canon augmentée"},
-            {"id": "zap_pierce", "name": "Canon perforant", "description": "Le canon traverse les ennemis"},
-            {"id": "lightning_damage", "name": "Lightning +40%", "description": "Les lightning font plus de dégâts"},
-            {"id": "lightning_fire_rate", "name": "Cadence lightning +50%", "description": "Lightning plus fréquents"},
-            {"id": "lightning_chain", "name": "Chaîne lightning +1", "description": "Les lightning chaînent sur plus d'ennemis"},
-            {"id": "lightning_storm", "name": "Tempête de lightning", "description": "Lightning multiples simultanés"},
-            {"id": "orb_count", "name": "Orb supplémentaire", "description": "Ajoute une orb défensive"},
-            {"id": "orb_damage", "name": "Orb +50%", "description": "Les orb font plus de dégâts"},
-            {"id": "orb_speed", "name": "Orb rapides", "description": "Les orb tournent plus vite"},
-            {"id": "orb_size", "name": "Orb géantes", "description": "Orb plus grandes et plus de dégâts"}
-        ]
-    
-    def recalculate_adaptive_sizes(self):
-        """Cette méthode n'est plus utilisée - les tailles sont maintenant fixes par preset"""
-        # Les presets fixes remplacent le système adaptatif
-        # Cette méthode est conservée pour compatibilité mais ne fait plus rien
-        pass
         
         # Types de bonus donnés par les ennemis spéciaux
         self.BONUS_TYPES = [
@@ -448,42 +423,17 @@ class Config:
         self.MINIMAP_PLAYER_SIZE = 4  # Légèrement plus grand
         self.MINIMAP_ENEMY_SIZE = 3   # Légèrement plus grand
         
-    def recalculate_adaptive_sizes(self):
-        """Recalcule les tailles adaptatives après un redimensionnement"""
-        # Recalculer les facteurs d'échelle pour l'interface
-        self.ui_scale = min(self.WINDOW_WIDTH / 1920, self.WINDOW_HEIGHT / 1080)
-        self.font_scale = max(0.5, self.ui_scale)  # Échelle minimum pour la lisibilité
+        # Système d'effets de mort différenciés par arme
+        # Effet de repousse pour les orbes
+        self.ORB_DEATH_PUSHBACK_DISTANCE = 15  # Distance de repousse en pixels
+        self.ORB_DEATH_FADE_DURATION = 30  # Durée du fade en frames
+        self.ORB_DEATH_COLOR_TINT = (255, 50, 50)  # Teinte rouge
         
-        # Recalculer les paramètres du joueur
-        self.PLAYER_SIZE = int(self.WINDOW_WIDTH * 0.02)
-        self.PLAYER_SPEED = self.WINDOW_WIDTH * 0.001
+        # Effet de désintégration pour les beams
+        self.BEAM_DEATH_ASH_COUNT = 50  # Nombre de particules de cendres
+        self.BEAM_DEATH_ASH_FALL_SPEED_MIN = 1.0  # Vitesse min de chute
+        self.BEAM_DEATH_ASH_FALL_SPEED_MAX = 3.0  # Vitesse max de chute
+        self.BEAM_DEATH_ASH_LIFETIME = 60  # Durée de vie des cendres en frames
+        self.BEAM_DEATH_ASH_COLOR = (30, 30, 30)  # Couleur des cendres
         
-        # Recalculer les paramètres des ennemis
-        self.ENEMY_SIZE = int(self.WINDOW_WIDTH * 0.015)
-        self.ENEMY_SPEED = self.WINDOW_WIDTH * 0.003
-        
-        # Recalculer les paramètres du canon
-        self.ZAP_SPEED = self.WINDOW_WIDTH * 0.01
-        self.ZAP_SIZE = int(self.WINDOW_WIDTH * 0.008)
-        
-        # Recalculer les paramètres des lightning
-        self.LIGHTNING_SIZE = int(self.WINDOW_WIDTH * 0.015)
-        
-        # Recalculer les paramètres des particules
-        self.PARTICLE_SIZE = max(2, int(self.WINDOW_WIDTH * 0.005))
-        self.PARTICLE_SPEED = self.WINDOW_WIDTH * 0.002
-        
-        # Recalculer les paramètres des orb
-        self.ENERGY_ORB_RADIUS = self.WINDOW_WIDTH * 0.08
-        self.ENERGY_ORB_SIZE = int(self.WINDOW_WIDTH * 0.01)
-        
-        # Recalculer les paramètres de l'interface utilisateur
-        self.HEALTH_BAR_WIDTH = int(self.WINDOW_WIDTH * 0.2)  # 20% de la largeur
-        self.HEALTH_BAR_HEIGHT = int(self.WINDOW_HEIGHT * 0.02)  # 2% de la hauteur
-        self.UI_MARGIN = int(self.WINDOW_WIDTH * 0.01)  # 1% de marge
-        
-        # Recalculer les paramètres de la minimap
-        self.MINIMAP_SIZE_RATIO = 6.0
-        self.MINIMAP_MARGIN = int(self.WINDOW_WIDTH * 0.01)
-        
-        print(f"Tailles recalculées - Joueur: {self.PLAYER_SIZE}, Ennemis: {self.ENEMY_SIZE}, Orbes: {self.ENERGY_ORB_SIZE}")
+

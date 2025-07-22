@@ -22,6 +22,9 @@ def main():
     
     # Mode test "Always Skip" - pour tester rapidement le système
     test_always_skip = False  # Mettre True pour tester
+    test_survival_timer = False  # Mettre True pour tester le timer de survie
+    test_lightning_effects = False  # Mettre True pour tester les effets de lightning
+    test_beam_effects = False  # Mettre True pour tester les effets de beam
     
     try:
         # Initialise Pygame
@@ -38,6 +41,25 @@ def main():
             game.level = 50  # Niveau élevé
             # Cette ligne sera décommentée pour le test réel
             # game.upgrade_options = []  # Pas d'options disponibles
+        
+        # Si mode test timer activé, réduire la santé pour tester le game over
+        if test_survival_timer:
+            print("🧪 MODE TEST SURVIVAL TIMER ACTIVÉ")
+            game.player.health = 20  # Santé très faible pour test rapide
+        
+        # Si mode test lightning activé, débloquer automatiquement le Lightning
+        if test_lightning_effects:
+            print("🧪 MODE TEST LIGHTNING EFFECTS ACTIVÉ")
+            from weapons import LightningWeapon
+            game.weapon_manager.add_weapon(LightningWeapon)
+            print("Lightning débloqué pour tester les effets de particules !")
+        
+        # Si mode test beam activé, débloquer automatiquement le Beam
+        if test_beam_effects:
+            print("🧪 MODE TEST BEAM EFFECTS ACTIVÉ")
+            from weapons import BeamWeapon
+            game.weapon_manager.add_weapon(BeamWeapon)
+            print("Beam débloqué pour tester les dégâts !")
         
         game.run()
         
