@@ -29,32 +29,63 @@ class Player:
         self.facing_direction = "right"  # "left" ou "right"
         self.last_movement_x = 0  # Pour détecter le changement de direction
         
-        # Animation avec 5 sprites
+        # Animation - paramètres par défaut (seront ajustés selon le type de sprite)
         self.animation_frames = []  # Liste des frames d'animation
         self.animation_frames_left = []  # Frames pour la direction gauche
         self.current_frame = 0
         self.animation_timer = 0
-        self.frame_sequence = [4, 3, 2, 1, 0]  # Séquence 5-4-3-2-1 en boucle
+        self.frame_sequence = []  # Sera défini selon le type de sprite
         self.sequence_index = 0
         
-        # Charger la spritesheet player2.png
+        # Obtenir le type de sprite depuis la config (défaut : 1)
+        sprite_type = getattr(config, 'PLAYER_SPRITE_TYPE', 1)
+        
+        # Charger la spritesheet selon le type
+        self._load_player_sprite(sprite_type)
+        
+        # Ajuster la vitesse d'animation selon le nombre de frames
+        # Pour une durée d'animation totale similaire, calculer le délai entre frames
+        if len(self.frame_sequence) > 0:
+            # Viser environ 1 seconde pour un cycle complet d'animation à 60 FPS
+            total_animation_duration = 60  # frames (1 seconde à 60 FPS)
+            self.animation_delay = max(1, total_animation_duration // len(self.frame_sequence))
+        else:
+            self.animation_delay = 9  # Valeur par défaut
+    def _load_player_sprite(self, sprite_type):
+        """Charge la spritesheet du joueur selon le type spécifié"""
         try:
-            spritesheet = pygame.image.load("assets/player/player2.png").convert_alpha()
+            if sprite_type == 1:
+                # Type 1 : player2.png (5 frames, séquence 5-4-3-2-1)
+                spritesheet = pygame.image.load("assets/player/player2.png").convert_alpha()
+                num_frames = 5
+                self.frame_sequence = [4, 3, 2, 1, 0]  # Séquence 5-4-3-2-1 en boucle
+                print(f"Chargement sprite type 1 : player2.png (5 frames, séquence 5-4-3-2-1)")
+                
+            elif sprite_type == 2:
+                # Type 2 : player3.png (9 frames, séquence 1-2-3-4-5-6-7-8-9)
+                spritesheet = pygame.image.load("assets/player/player3.png").convert_alpha()
+                num_frames = 9
+                self.frame_sequence = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Séquence 1-2-3-4-5-6-7-8-9 en boucle
+                print(f"Chargement sprite type 2 : player3.png (9 frames, séquence 1-2-3-4-5-6-7-8-9)")
+                
+            else:
+                print(f"Type de sprite non supporté : {sprite_type}, utilisation du type 1 par défaut")
+                return self._load_player_sprite(1)
             
-            # Dimensions des sprites individuels (à ajuster selon votre image)
-            sprite_width = spritesheet.get_width() // 5  # 5 sprites horizontalement
+            # Dimensions des sprites individuels
+            sprite_width = spritesheet.get_width() // num_frames  # Frames horizontalement
             sprite_height = spritesheet.get_height()
             
             sprite_size = self.size * 4  # Facteur d'échelle x4 pour une meilleure visibilité
             
-            # Extraire les 5 sprites (positions 0, 1, 2, 3, 4)
-            for i in range(5):
+            # Extraire tous les sprites
+            for i in range(num_frames):
                 # Extraire le sprite à la position (i * sprite_width, 0)
                 frame_rect = pygame.Rect(i * sprite_width, 0, sprite_width, sprite_height)
                 frame = spritesheet.subsurface(frame_rect).copy()
                 
                 # Redimensionner le sprite avec antialiasing si activé
-                if config.SPRITE_SMOOTHING:
+                if self.config.SPRITE_SMOOTHING:
                     frame_scaled = pygame.transform.smoothscale(frame, (sprite_size, sprite_size))
                 else:
                     frame_scaled = pygame.transform.scale(frame, (sprite_size, sprite_size))
@@ -69,9 +100,15 @@ class Player:
                 self.animation_frames_left.append(frame_left)
             
             self.has_image = True
-            print(f"Animation spritesheet du joueur activée (5 frames, séquence 5-4-3-2-1 en boucle)")
-        except (pygame.error, FileNotFoundError):
-            print("Spritesheet assets/player/player2.png non trouvée, utilisation du rendu par défaut")
+            # Calculer la vitesse d'animation pour ce type de sprite
+            total_animation_duration = 60  # frames (1 seconde à 60 FPS)
+            animation_delay = max(1, total_animation_duration // num_frames)
+            animation_fps = 60.0 / animation_delay
+            print(f"Animation spritesheet du joueur activée ({num_frames} frames, ~{animation_fps:.1f} FPS d'animation)")
+            
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"Spritesheet du joueur non trouvée : {e}")
+            print("Utilisation du rendu par défaut")
             self.animation_frames = []
             self.animation_frames_left = []
             self.has_image = False
@@ -122,8 +159,8 @@ class Player:
             # Avancer le timer d'animation (compteur de frames)
             self.animation_timer += 1
             
-            # Changer de frame toutes les 9 frames de jeu (~6.7 FPS d'animation à 60 FPS)
-            if self.animation_timer >= 9:
+            # Changer de frame selon le délai calculé pour ce type de sprite
+            if self.animation_timer >= self.animation_delay:
                 self.animation_timer = 0
                 self.sequence_index = (self.sequence_index + 1) % len(self.frame_sequence)
                 self.current_frame = self.frame_sequence[self.sequence_index]
@@ -259,7 +296,12 @@ class Enemy:
         
         # Choisir un sprite aléatoire pour cet ennemi et le redimensionner à la bonne taille
         if Enemy.sprites:
-            self.sprite_id = random.choice(list(Enemy.sprites.keys()))
+            # Mode test : forcer des ennemis tireurs si configuré
+            if hasattr(config, 'FORCE_SHOOTER_ENEMIES') and config.FORCE_SHOOTER_ENEMIES:
+                self.sprite_id = config.SHOOTER_ENEMY_SPRITE_ID
+            else:
+                self.sprite_id = random.choice(list(Enemy.sprites.keys()))
+            
             # Redimensionner le sprite original à la taille définie dans le preset avec antialiasing
             original_sprite = Enemy.sprites[self.sprite_id]
             if config.SPRITE_SMOOTHING:

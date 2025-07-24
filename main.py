@@ -20,11 +20,20 @@ def main():
     # None = Détection automatique selon l'écran
     screen_size = 3  # Test en 1440p pour ajustements
     
+    # === TYPE DE SPRITE JOUEUR ===
+    # Type de sprite joueur à utiliser :
+    # 1 = player2.png (5 frames horizontales, animation séquence 5-4-3-2-1 en boucle)
+    # 2 = player3.png (9 frames horizontales, animation séquence 1-2-3-4-5-6-7-8-9 en boucle)
+    # Les deux animations ont une durée d'environ 1 seconde pour une fluidité cohérente
+    player_sprite_type = 2  # Choisir 1 ou 2
+    
     # Mode test "Always Skip" - pour tester rapidement le système
     test_always_skip = False  # Mettre True pour tester
     test_survival_timer = False  # Mettre True pour tester le timer de survie
     test_lightning_effects = False  # Mettre True pour tester les effets de lightning
     test_beam_effects = False  # Mettre True pour tester les effets de beam
+    test_shield_effects = False  # Mettre True pour tester les boucliers
+    test_force_shooters = False  # Mettre True pour forcer des ennemis tireurs
     
     try:
         # Initialise Pygame
@@ -32,6 +41,7 @@ def main():
         
         # Crée et lance une nouvelle partie
         config = Config(forced_screen_size=screen_size)
+        config.PLAYER_SPRITE_TYPE = player_sprite_type  # Ajouter le type de sprite à la config
         game = Game(config)
         
         # Si mode test activé, simuler une situation où toutes les upgrades sont au max
@@ -60,6 +70,19 @@ def main():
             from weapons import BeamWeapon
             game.weapon_manager.add_weapon(BeamWeapon)
             print("Beam débloqué pour tester les dégâts !")
+        
+        # Si mode test shield activé, donner un bouclier au joueur
+        if test_shield_effects:
+            print("🧪 MODE TEST SHIELD EFFECTS ACTIVÉ")
+            game.bonus_manager.apply_bonus("shield", game)
+            print("Bouclier activé pour tester les projectiles ennemis !")
+        
+        # Si mode test force shooters activé, forcer des ennemis tireurs
+        if test_force_shooters:
+            print("🧪 MODE TEST FORCE SHOOTERS ACTIVÉ")
+            # Passer le mode test à la config pour forcer les tireurs
+            game.config.FORCE_SHOOTER_ENEMIES = True
+            print("Mode tireurs forcés activé !")
         
         game.run()
         

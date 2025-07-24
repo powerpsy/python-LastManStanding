@@ -34,6 +34,9 @@ class Config:
         # FPS fixe pour tous les presets
         self.FPS = 60
         
+        # Durée des transitions (en secondes)
+        self.TRANSITION_DURATION = 0.2  # Durée par défaut pour toutes les transitions
+        
         # Paramètres de jeu fixes
         self.PLAYER_MAX_HEALTH = 300
         self.PLAYER_FRICTION = 0.85

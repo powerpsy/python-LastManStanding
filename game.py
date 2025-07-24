@@ -5,6 +5,7 @@ import math
 from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
 from background import Background
 from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill
+from transitions import TransitionManager, TRANSITION_TYPES
 
 class Game:
     """Classe principale du jeu"""
@@ -116,6 +117,12 @@ class Game:
         # Initialisation du background
         self.background = Background(config)
         
+        # Gestionnaire de transitions
+        self.transition_manager = TransitionManager(self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT)
+        self.transition_manager.set_screen_reference(self.screen)
+        self._capture_new_screen = False  # Flag pour capturer le nouvel écran
+        self._pre_transition_state = 'game'  # État d'écran avant transition
+        
         # Gestionnaire de bonus
         self.bonus_manager = BonusManager(config)
         
@@ -146,6 +153,177 @@ class Game:
         minutes = survival_time_ms // 60000
         seconds = (survival_time_ms % 60000) // 1000
         return f"{minutes:02d}:{seconds:02d}"
+    
+    def transition_to_upgrade_screen(self):
+        """Démarre une transition vers l'écran d'upgrade"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'game'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def show_upgrade():
+            self.show_upgrade_screen = True
+            self.paused = True
+            self.paused_skills = False
+            self.ban_mode = False
+            self._pre_transition_state = 'upgrade'  # Changer l'état de transition
+            
+            # Forcer le rendu immédiat du nouvel écran (upgrade)
+            self.screen.fill((50, 50, 50))  # Fond
+            self.draw_upgrade_screen()  # Dessiner l'écran upgrade
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="wipe_vertical_split",
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=show_upgrade
+        )
+    
+    def transition_from_upgrade_screen(self):
+        """Démarre une transition de retour au jeu depuis l'écran d'upgrade"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'upgrade'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def hide_upgrade():
+            self.show_upgrade_screen = False
+            self.paused = False
+            self.ban_mode = False
+            self._pre_transition_state = 'game'  # Changer l'état de transition
+            
+            # Forcer le rendu immédiat du nouvel écran (jeu)
+            self.screen.fill((50, 50, 50))  # Fond
+            self._draw_game_screen()  # Dessiner l'écran de jeu
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="wipe_vertical_split_reverse",
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=hide_upgrade
+        )
+    
+    def transition_to_game_over(self):
+        """Démarre une transition vers l'écran de game over"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'game'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def show_game_over():
+            self.trigger_game_over()
+            self._pre_transition_state = 'game'  # L'écran de game over fait partie du jeu
+            
+            # Forcer le rendu immédiat du nouvel écran (game over)
+            self.screen.fill((50, 50, 50))  # Fond
+            self._draw_game_screen()  # Dessiner l'écran de jeu (avec game over)
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="wipe_horizontal_left_to_right",
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=show_game_over
+        )
+    
+    def transition_to_skills_screen(self):
+        """Démarre une transition vers l'écran des compétences"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'game'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def show_skills():
+            self.paused_skills = True
+            self.paused = True
+            self.show_upgrade_screen = False
+            self._pre_transition_state = 'skills'  # Changer l'état de transition
+            
+            # Forcer le rendu immédiat du nouvel écran
+            self.screen.fill((50, 50, 50))  # Fond
+            self.draw_skills_screen()  # Dessiner l'écran skills
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="diagonal_top_left_to_bottom_right",
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=show_skills
+        )
+    
+    def transition_from_skills_screen(self):
+        """Démarre une transition de retour au jeu depuis l'écran des compétences"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'skills'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def hide_skills():
+            self.paused_skills = False
+            self.paused = False
+            self._pre_transition_state = 'game'  # Changer l'état de transition
+            
+            # Forcer le rendu immédiat du nouvel écran (jeu)
+            self.screen.fill((50, 50, 50))  # Fond
+            self._draw_game_screen()  # Dessiner l'écran de jeu
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="diagonal_bottom_right_to_top_left", 
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=hide_skills
+        )
+
+    def transition_to_exit_menu(self):
+        """Démarre une transition vers le menu de sortie"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'game'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def show_exit():
+            self.show_exit_menu = True
+            self.paused = True
+            self._pre_transition_state = 'exit'  # Changer l'état de transition
+            
+            # Forcer le rendu immédiat du nouvel écran (exit menu)
+            self.screen.fill((50, 50, 50))  # Fond
+            self.draw_exit_menu()  # Dessiner l'écran exit
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="fade",
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=show_exit
+        )
+    
+    def transition_from_exit_menu(self):
+        """Démarre une transition de retour au jeu depuis le menu de sortie"""
+        # Sauvegarder l'état actuel pour la transition
+        self._pre_transition_state = 'exit'
+        
+        # Capturer l'écran actuel
+        self.transition_manager.set_screen_reference(self.screen)
+        
+        def hide_exit():
+            self.show_exit_menu = False
+            self.paused = False
+            self._pre_transition_state = 'game'  # Changer l'état de transition
+            
+            # Forcer le rendu immédiat du nouvel écran (jeu)
+            self.screen.fill((50, 50, 50))  # Fond
+            self._draw_game_screen()  # Dessiner l'écran de jeu
+            self.transition_manager.update_new_surface(self.screen)  # Capturer immédiatement
+        
+        self.transition_manager.start_transition(
+            transition_type="fade",
+            duration=self.config.TRANSITION_DURATION,
+            on_complete=hide_exit
+        )
 
     def handle_events(self):
         """Gère les événements pygame"""
@@ -177,10 +355,8 @@ class Game:
                                 selected_upgrade = self.upgrade_options[i]
                                 print(f"✨ Upgrade sélectionné: {selected_upgrade['name']}")
                                 self.apply_upgrade(selected_upgrade)
-                                # Fermer l'écran d'upgrade
-                                self.show_upgrade_screen = False
-                                self.paused = False
-                                self.ban_mode = False
+                                # Fermer l'écran d'upgrade avec transition
+                                self.transition_from_upgrade_screen()
                                 return
                     
                     # ROLL (seulement si des options sont disponibles)
@@ -193,9 +369,7 @@ class Game:
                         # Changer le background à la prochaine draw
                     # SKIP
                     elif skip_rect.collidepoint(mx, my):
-                        self.show_upgrade_screen = False
-                        self.paused = False
-                        self.ban_mode = False
+                        self.transition_from_upgrade_screen()
                     # ALWAYS SKIP (seulement si aucune option disponible)
                     elif len(self.upgrade_options) == 0:
                         # Définir le rect du bouton Always Skip
@@ -203,9 +377,7 @@ class Game:
                         if always_skip_rect.collidepoint(mx, my):
                             print("🚀 Mode 'Always Skip' activé ! Plus d'écrans d'upgrade jusqu'à la fin de la partie.")
                             self.always_skip_mode = True
-                            self.show_upgrade_screen = False
-                            self.paused = False
-                            self.ban_mode = False
+                            self.transition_from_upgrade_screen()
                     # Sélection d'une option en mode BAN (clic sur les cadres englobants)
                     elif self.ban_mode:
                         for i, rect in enumerate(self.get_upgrade_combined_rects()):
@@ -227,8 +399,7 @@ class Game:
                                         # Si toujours vide, désactiver l'écran d'upgrade
                                         if len(self.upgrade_options) == 0:
                                             print("Plus d'options d'upgrade disponibles !")
-                                            self.show_upgrade_screen = False
-                                            self.paused = False
+                                            self.transition_from_upgrade_screen()
                                 else:
                                     print("Erreur: Index d'option invalide pour BAN")
                                     self.ban_mode = False
@@ -236,27 +407,28 @@ class Game:
                 return
             
             elif event.type == pygame.KEYDOWN:
+                # Gestion de l'écran d'upgrade
+                if self.show_upgrade_screen:
+                    if event.key == pygame.K_ESCAPE and not self.transition_manager.is_active:
+                        self.transition_from_upgrade_screen()
+                        return
                 # Gestion de la fenêtre de compétences
-                if self.paused_skills:
+                elif self.paused_skills:
                     if event.key == pygame.K_TAB or event.key == pygame.K_ESCAPE:
-                        self.paused_skills = False
-                        self.paused = False
+                        self.transition_from_skills_screen()
                         return
                 # Gestion de la fenêtre de sortie
                 elif self.show_exit_menu:
-                    if event.key == pygame.K_ESCAPE:
-                        self.show_exit_menu = False
-                        self.paused = False
+                    if event.key == pygame.K_ESCAPE and not self.transition_manager.is_active:
+                        self.transition_from_exit_menu()
                         return
                 # Ouverture de la fenêtre de compétences
                 elif event.key == pygame.K_TAB and not self.show_exit_menu and not self.show_upgrade_screen:
-                    self.paused_skills = True
-                    self.paused = True
+                    self.transition_to_skills_screen()
                     return
                 # Ouverture du menu de sortie
-                elif event.key == pygame.K_ESCAPE and not self.paused_skills and not self.show_upgrade_screen and not self.show_exit_menu:
-                    self.show_exit_menu = True
-                    self.paused = True
+                elif event.key == pygame.K_ESCAPE and not self.paused_skills and not self.show_upgrade_screen and not self.show_exit_menu and not self.transition_manager.is_active:
+                    self.transition_to_exit_menu()
                     return
             
             # Menu de sortie : détection des clics sur les boutons
@@ -268,9 +440,17 @@ class Game:
                             if i == 0:  # QUIT
                                 self.running = False
                             elif i == 1:  # RESTART
-                                self.show_exit_menu = False
-                                self.paused = False
-                                self.restart_game()
+                                # Transition avant restart
+                                def do_restart():
+                                    self.restart_game()
+                                
+                                self._pre_transition_state = 'exit'
+                                self.transition_manager.set_screen_reference(self.screen)
+                                self.transition_manager.start_transition(
+                                    transition_type="fade",
+                                    duration=self.config.TRANSITION_DURATION,
+                                    on_complete=do_restart
+                                )
                             elif i == 2:  # OPTION
                                 # À compléter : ouvrir un menu d'options si besoin
                                 pass
@@ -278,6 +458,9 @@ class Game:
 
     def update(self):
         """Met à jour la logique du jeu"""
+        # Mettre à jour les transitions (toujours actif)
+        self.transition_manager.update()
+        
         if self.paused or self.game_over:
             return
         
@@ -364,7 +547,7 @@ class Game:
                 if self.bonus_manager.can_take_damage():
                     self.player.take_damage(self.config.ENEMY_DAMAGE)
                     if self.player.health <= 0:
-                        self.trigger_game_over()
+                        self.transition_to_game_over()
                         break
         
         # Nouveau système d'armes orienté objet
@@ -804,21 +987,42 @@ class Game:
         # TOUJOURS remplir l'écran d'abord pour éviter l'écran noir
         self.screen.fill((50, 50, 50))  # Fond gris foncé
         
-        if self.show_upgrade_screen:
-            self.draw_upgrade_screen()
-            pygame.display.flip()
-            return
-
-        if self.paused_skills:
-            self.draw_skills_screen()
-            pygame.display.flip()
-            return
-
-        if self.show_exit_menu:
-            self.draw_exit_menu()
-            pygame.display.flip()
-            return
+        # Si une transition est active, ne pas changer d'écran encore
+        if self.transition_manager.is_active:
+            # Pendant la transition, dessiner l'écran approprié selon l'état actuel
+            # (pas l'état de pré-transition)
+            if self.show_upgrade_screen:
+                self.draw_upgrade_screen()
+            elif self.paused_skills:
+                self.draw_skills_screen()
+            elif self.show_exit_menu:
+                self.draw_exit_menu()
+            else:
+                self._draw_game_screen()
+        else:
+            # Pas de transition active, dessiner normalement
+            if self.show_upgrade_screen:
+                self.draw_upgrade_screen()
+            elif self.paused_skills:
+                self.draw_skills_screen()
+            elif self.show_exit_menu:
+                self.draw_exit_menu()
+            else:
+                self._draw_game_screen()
         
+        # Capturer le nouvel écran si nécessaire (après changement d'état)
+        if self._capture_new_screen and self.transition_manager.is_active:
+            self.transition_manager.update_new_surface(self.screen)
+            self._capture_new_screen = False
+        
+        # Dessiner les transitions par-dessus tout le reste
+        self.transition_manager.render(self.screen)
+        
+        # TOUJOURS faire le flip pour afficher à l'écran
+        pygame.display.flip()
+    
+    def _draw_game_screen(self):
+        """Dessine l'écran de jeu principal"""
         # Utiliser les coordonnées de caméra avec délai
         camera_x = self.camera_x
         camera_y = self.camera_y
@@ -840,9 +1044,6 @@ class Game:
             self.draw_pause_screen()
         elif self.game_over:
             self.draw_game_over_screen()
-        
-        # TOUJOURS faire le flip pour afficher à l'écran
-        pygame.display.flip()
 
     def draw_button(self, text, rect, color, text_color=None, border_radius=14):
         """
@@ -1382,12 +1583,8 @@ class Game:
         
         self.upgrade_options = self.get_smart_upgrade_options()
         
-        # Toujours afficher l'écran, même s'il n'y a pas d'options
-        # Si pas d'options, on proposera le bouton "Always Skip"
-        self.show_upgrade_screen = True
-        self.paused = True
-        self.paused_skills = False
-        self.ban_mode = False
+        # Démarrer la transition vers l'écran d'upgrade
+        self.transition_to_upgrade_screen()
     
     def get_upgrade_option_rects(self):
         # Retourne les rects des 3 options pour la détection (boutons agrandis x2)
@@ -1447,7 +1644,8 @@ class Game:
     def draw_upgrade_screen(self):
         """Affiche l'écran de choix d'upgrade"""
         # Vérification de sécurité : si pas d'options, fermer l'écran
-        if len(self.upgrade_options) == 0:
+        # MAIS pas pendant une transition active
+        if len(self.upgrade_options) == 0 and not self.transition_manager.is_active:
             print("Aucune option d'upgrade disponible, fermeture de l'écran")
             self.show_upgrade_screen = False
             self.paused = False
@@ -1762,7 +1960,7 @@ class Game:
                     # Vérifier si le joueur est mort
                     if self.player.health <= 0:
                         self.player.health = 0
-                        self.trigger_game_over()
+                        self.transition_to_game_over()
                 
                 projectiles_to_remove.append(projectile)
         
