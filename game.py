@@ -2,9 +2,9 @@ import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
+from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, Coin, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
 from background import Background
-from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill, MagnetSkill
+from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill, MagnetSkill, ShieldSkill
 from transitions import TransitionManager, TRANSITION_TYPES
 
 class Game:
@@ -78,6 +78,9 @@ class Game:
         self.orb_death_effects = []  # Nouvelle liste pour les effets de mort par orbe
         self.beam_death_effects = []  # Nouvelle liste pour les effets de mort par beam
         self.collectibles = []  # Nouvelle liste pour les objets collectibles
+        
+        # Système de score
+        self.score = 0  # Score total du joueur
         
         # Gestion des vagues d'ennemis
         self.wave_number = 1
@@ -435,6 +438,20 @@ class Game:
                 elif event.key == pygame.K_ESCAPE and not self.paused_skills and not self.show_upgrade_screen and not self.show_exit_menu and not self.transition_manager.is_active:
                     self.transition_to_exit_menu()
                     return
+                # Gestion du game over - Restart avec R
+                elif self.game_over and event.key == pygame.K_r and not self.transition_manager.is_active:
+                    # Transition avant restart
+                    def do_restart():
+                        self.restart_game()
+                    
+                    self._pre_transition_state = 'game_over'
+                    self.transition_manager.set_screen_reference(self.screen)
+                    self.transition_manager.start_transition(
+                        transition_type="fade",
+                        duration=self.config.TRANSITION_DURATION,
+                        on_complete=do_restart
+                    )
+                    return
             
             # Menu de sortie : détection des clics sur les boutons
             elif self.show_exit_menu and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -550,7 +567,7 @@ class Game:
             if self.check_collision(self.player, enemy):
                 # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
                 if self.bonus_manager.can_take_damage():
-                    self.player.take_damage(self.config.ENEMY_DAMAGE)
+                    self.player.take_damage(self.config.ENEMY_DAMAGE, self.skill_manager)
                     if self.player.health <= 0:
                         self.transition_to_game_over()
                         break
@@ -925,6 +942,42 @@ class Game:
     
     def handle_enemy_drops(self, enemy):
         """Gère les drops d'objets collectibles quand un ennemi meurt"""
+        # Compter le nombre de pièces actuellement sur le terrain
+        current_coins = sum(1 for collectible in self.collectibles if isinstance(collectible, Coin))
+        
+        # TOUJOURS lâcher une pièce quand un ennemi meurt (si limite pas atteinte)
+        if current_coins < self.config.COIN_MAX_ON_FIELD:
+            # Calculer le centre exact de l'ennemi
+            enemy_center_x = enemy.x + enemy.size // 2
+            enemy_center_y = enemy.y + enemy.size // 2
+            
+            coin = Coin(
+                enemy_center_x,
+                enemy_center_y,
+                self.config
+            )
+            self.collectibles.append(coin)
+        else:
+            # Si trop de pièces, supprimer la plus ancienne
+            oldest_coin = None
+            for collectible in self.collectibles:
+                if isinstance(collectible, Coin):
+                    oldest_coin = collectible
+                    break
+            if oldest_coin:
+                self.collectibles.remove(oldest_coin)
+                
+                # Ajouter la nouvelle pièce au centre de l'ennemi
+                enemy_center_x = enemy.x + enemy.size // 2
+                enemy_center_y = enemy.y + enemy.size // 2
+                
+                coin = Coin(
+                    enemy_center_x,
+                    enemy_center_y,
+                    self.config
+                )
+                self.collectibles.append(coin)
+        
         # Compter le nombre de cœurs actuellement sur le terrain
         current_hearts = sum(1 for collectible in self.collectibles if isinstance(collectible, Heart))
         
@@ -973,7 +1026,7 @@ class Game:
             
             # Vérifier si l'objet a été collecté
             if collectible.is_collected:
-                collectible.on_collect(self.player)
+                collectible.on_collect(self.player, self)
                 self.collectibles.remove(collectible)
     
     def apply_magnet_effect(self, collectible, magnet_effect):
@@ -1176,16 +1229,44 @@ class Game:
         # Contour de la barre
         pygame.draw.rect(self.screen, self.config.WHITE, health_bg_rect, 2)
         
+        # === BARRE DE BOUCLIER ===
+        if hasattr(self.player, 'shield_points') and hasattr(self.player, 'max_shield_points'):
+            if self.player.max_shield_points > 0:
+                shield_ratio = self.player.shield_points / self.player.max_shield_points
+                
+                # Position sous la barre de vie
+                shield_bar_y = health_bar_y + health_bar_height + 5
+                shield_bar_height = health_bar_height // 2  # Plus petite que la barre de vie
+                
+                # Fond de la barre de bouclier
+                shield_bg_rect = pygame.Rect(health_bar_x, shield_bar_y, health_bar_width, shield_bar_height)
+                pygame.draw.rect(self.screen, self.config.GRAY, shield_bg_rect)
+                
+                # Barre de bouclier actuelle (couleur dorée)
+                shield_width = int(health_bar_width * shield_ratio)
+                if shield_width > 0:
+                    shield_rect = pygame.Rect(health_bar_x, shield_bar_y, shield_width, shield_bar_height)
+                    shield_color = (255, 215, 0)  # Doré
+                    pygame.draw.rect(self.screen, shield_color, shield_rect)
+                
+                # Contour de la barre de bouclier
+                pygame.draw.rect(self.screen, self.config.WHITE, shield_bg_rect, 1)
+        
         wave_text = f"Vague {self.wave_number} - Ennemis: {len(self.enemies)}"
         wave_surface = self.font.render(wave_text, True, self.config.WHITE)
         self.screen.blit(wave_surface, (30, 60))
         
+        # Afficher le score
+        score_text = f"Score: {self.score}"
+        score_surface = self.font.render(score_text, True, self.config.YELLOW)
+        self.screen.blit(score_surface, (30, 90))
+        
         # Afficher les armes du joueur (sans caractères spéciaux, avec espacement)
         weapons_text = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
         weapons_surface = self.small_font.render(weapons_text, True, self.config.CYAN)
-        self.screen.blit(weapons_surface, (30, 100))  # Plus d'espace après la vague
+        self.screen.blit(weapons_surface, (30, 130))  # Décalé vers le bas pour le score
         
-        y_offset = 130  # Espacement augmenté pour éviter superposition
+        y_offset = 160  # Espacement augmenté pour éviter superposition
         for weapon in self.weapon_manager.weapons:
             weapon_text = f"  {weapon.name} Niv.{weapon.level}"
             weapon_surface = self.small_font.render(weapon_text, True, self.config.WHITE)
@@ -1368,6 +1449,11 @@ class Game:
     
     def restart_game(self):
         """Redémarre le jeu"""
+        # === FERMER TOUS LES MENUS ===
+        self.show_exit_menu = False
+        self.paused_skills = False
+        self.show_upgrade_screen = False
+        
         self.game_over = False
         self.paused = False
         self.score = 0
@@ -1559,7 +1645,8 @@ class Game:
             "Vitesse": "vitesse.png",
             "Régénération": "régénération.png", 
             "Résistance": "bouclier.png",  # bouclier.png pour Résistance
-            "Aimant": "aimant.png"  # Si elle existe
+            "Aimant": "aimant.png",
+            "Bouclier": "bouclier.png"  # Même image que Résistance pour l'instant
         }
         
         for skill_name, filename in skill_files.items():
@@ -1685,19 +1772,19 @@ class Game:
             else:
                 pygame.draw.rect(self.screen, (180, 180, 180), rect.inflate(-20, -20), border_radius=6)
         
-        # Afficher le niveau de l'arme dans le coin avec un fond semi-transparent
+        # Afficher le niveau de l'arme au centre avec un fond semi-transparent
         level_text = str(weapon.level)
-        level_surface = self.small_font.render(level_text, True, self.config.WHITE)
+        level_surface = self.font.render(level_text, True, self.config.WHITE)  # Utilise self.font au lieu de self.small_font
         
         # Créer un fond semi-transparent pour le niveau
-        level_bg_size = max(level_surface.get_width() + 4, level_surface.get_height() + 4)
+        level_bg_size = max(level_surface.get_width() + 12, level_surface.get_height() + 12)
         level_bg = pygame.Surface((level_bg_size, level_bg_size))
         level_bg.set_alpha(128)  # Semi-transparent
         level_bg.fill((0, 0, 0))  # Fond noir
         
-        # Positionner le fond et le texte
+        # Positionner le fond et le texte au centre de l'icône
         level_bg_rect = level_bg.get_rect()
-        level_bg_rect.bottomright = (rect.right - 2, rect.bottom - 2)
+        level_bg_rect.center = rect.center
         self.screen.blit(level_bg, level_bg_rect)
         
         level_rect = level_surface.get_rect()
@@ -1761,19 +1848,19 @@ class Game:
             else:
                 pygame.draw.circle(self.screen, (120, 255, 120), center, rect.width//3)
         
-        # Afficher le niveau de la compétence dans le coin avec un fond semi-transparent
+        # Afficher le niveau de la compétence au centre avec un fond semi-transparent
         level_text = str(skill.level)
-        level_surface = self.small_font.render(level_text, True, self.config.WHITE)
+        level_surface = self.font.render(level_text, True, self.config.WHITE)  # Utilise self.font au lieu de self.small_font
         
         # Créer un fond semi-transparent pour le niveau
-        level_bg_size = max(level_surface.get_width() + 4, level_surface.get_height() + 4)
+        level_bg_size = max(level_surface.get_width() + 12, level_surface.get_height() + 12)
         level_bg = pygame.Surface((level_bg_size, level_bg_size))
         level_bg.set_alpha(128)  # Semi-transparent
         level_bg.fill((0, 0, 0))  # Fond noir
         
-        # Positionner le fond et le texte
+        # Positionner le fond et le texte au centre de l'icône
         level_bg_rect = level_bg.get_rect()
-        level_bg_rect.bottomright = (rect.right - 2, rect.bottom - 2)
+        level_bg_rect.center = rect.center
         self.screen.blit(level_bg, level_bg_rect)
         
         level_rect = level_surface.get_rect()
@@ -2162,7 +2249,7 @@ class Game:
             if self.check_collision(projectile, self.player):
                 # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
                 if self.bonus_manager.can_take_damage():
-                    self.player.take_damage(projectile.damage)
+                    self.player.take_damage(projectile.damage, self.skill_manager)
                     
                     # Vérifier si le joueur est mort
                     if self.player.health <= 0:
@@ -2338,6 +2425,12 @@ class Game:
             else:
                 print("Impossible d'ajouter Aimant : limite de compétences atteinte")
         
+        elif upgrade_id == "skill_shield":
+            if self.skill_manager.add_skill(ShieldSkill):
+                print("COMPÉTENCE BOUCLIER DÉBLOQUÉE !")
+            else:
+                print("Impossible d'ajouter Bouclier : limite de compétences atteinte")
+        
         # === AMÉLIORATIONS DE COMPÉTENCES ===
         elif upgrade_id.startswith("upgrade_skill_"):
             skill_name = upgrade_id.replace("upgrade_skill_", "").capitalize()
@@ -2412,6 +2505,14 @@ class Game:
                 "id": "skill_magnet", 
                 "name": "COMPÉTENCE|AIMANT", 
                 "description": "Nouvelle compétence: Attire automatiquement les objets collectibles !",
+                "is_new_weapon": True
+            })
+        
+        if not self.skill_manager.has_skill("Bouclier") and len(self.skill_manager.skills) < 14:
+            available_upgrades.append({
+                "id": "skill_shield", 
+                "name": "COMPÉTENCE|BOUCLIER", 
+                "description": "Nouvelle compétence: Donne des points de bouclier temporaires !",
                 "is_new_weapon": True
             })
         

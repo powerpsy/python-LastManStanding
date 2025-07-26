@@ -24,6 +24,62 @@
 | D | Déplacement vers la droite |
 | ESC | Quitter le jeu |
 
+## Compétences passives
+
+🛡️ Compétences Défensives
+1. Bouclier - Donne des points de bouclier temporaires
+    Niveau 1-5 : +20/40/60/80/100 points de bouclier
+    Se régénère lentement hors combat
+
+2. Évasion - Chance d'esquiver complètement les attaques
+    Niveau 1-5 : 5%/10%/15%/20%/25% de chance d'esquive
+
+3. Réflexion - Renvoie une partie des dégâts à l'attaquant
+    Niveau 1-5 : 10%/20%/30%/40%/50% des dégâts renvoyés
+
+⚔️ Compétences Offensives
+4. Rage - Plus la vie est basse, plus les dégâts augmentent
+    Niveau 1-5 : +10%/20%/30%/40%/50% de dégâts quand vie < 50%
+
+5. Critique - Chance d'infliger des dégâts critiques
+    Niveau 1-5 : 5%/10%/15%/20%/25% de chance de x2 dégâts
+
+6. Poison - Les attaques empoisonnent les ennemis
+    Niveau 1-5 : 2/4/6/8/10 dégâts/seconde pendant 3 secondes
+
+🏃 Compétences de Mobilité
+7. Dash - Téléportation courte distance avec invulnérabilité
+    Niveau 1-5 : Cooldown 10/8/6/4/2 secondes, distance fixe
+
+8. Fantôme - Traverser les ennemis pendant quelques secondes
+    Niveau 1-5 : Durée 1/2/3/4/5 secondes, cooldown 30s
+
+🎯 Compétences Utilitaires
+9. Zone de Ralentissement - Aura qui ralentit les ennemis proches
+    Niveau 1-5 : Ralentit de 20%/30%/40%/50%/60% dans un rayon de 100px
+
+10. Vampirisme - Récupère de la vie en tuant des ennemis
+    Niveau 1-5 : +2/4/6/8/10 PV par ennemi tué
+
+11. Multiplicateur d'XP - Augmente l'expérience gagnée
+    Niveau 1-3 : +25%/50%/100% d'XP
+
+🔥 Compétences Spéciales
+
+12. Explosion à la Mort - Explose quand la vie tombe à zéro
+    Niveau 1-3 : Dégâts 100/200/300 dans un rayon de 150px
+    Une seule utilisation par vie
+
+13. Aura de Feu - Brûle automatiquement les ennemis proches
+    Niveau 1-5 : 5/10/15/20/25 dégâts/seconde dans 80px de rayon
+
+14. Lucky Drop - Augmente la chance de drops rares
+    Niveau 1-3 : +20%/40%/60% de chance de bonus rares
+
+🔄 Compétences Combo
+15. Synergie d'Armes - Les armes se renforcent mutuellement
+    Niveau 1-5 : +5%/10%/15%/20%/25% de dégâts par arme possédée
+
 ## 🎯 Améliorations Restantes à Implémenter
 
 ### 🎨 Graphismes et Visuels

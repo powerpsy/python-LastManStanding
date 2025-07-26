@@ -165,14 +165,37 @@ class Player:
                 self.sequence_index = (self.sequence_index + 1) % len(self.frame_sequence)
                 self.current_frame = self.frame_sequence[self.sequence_index]
     
-    def take_damage(self, damage):
-        """Fait subir des dégâts au joueur"""
-        self.health = max(0, self.health - damage)
+    def take_damage(self, damage, skill_manager=None):
+        """Fait subir des dégâts au joueur en tenant compte du bouclier"""
+        original_damage = damage
+        
+        # Vérifier si le joueur a des points de bouclier (compétence Bouclier)
+        if hasattr(self, 'shield_points') and self.shield_points > 0:
+            if damage <= self.shield_points:
+                # Le bouclier absorbe tous les dégâts
+                self.shield_points -= damage
+                print(f"🛡️ Bouclier absorbe {damage} dégâts (reste: {self.shield_points})")
+                damage = 0
+            else:
+                # Le bouclier absorbe une partie des dégâts
+                absorbed = self.shield_points
+                damage -= self.shield_points
+                self.shield_points = 0
+                print(f"🛡️ Bouclier absorbe {absorbed} dégâts, {damage} dégâts restants")
+        
+        # Appliquer les dégâts restants à la vie
+        if damage > 0:
+            self.health = max(0, self.health - damage)
+        
+        # Notifier les compétences qu'un dégât a été pris (seulement si on a vraiment pris des dégâts)
+        if (original_damage > 0 and skill_manager and 
+            hasattr(skill_manager, 'notify_damage_taken')):
+            skill_manager.notify_damage_taken()
     
     def draw(self, screen, shield_hits=0):
         """Dessine le joueur avec l'animation de spritesheet et l'effet de bouclier"""
         
-        # === EFFET DE BOUCLIER ===
+        # === EFFET DE BOUCLIER TEMPORAIRE ===
         if shield_hits > 0:
             center_x = int(self.x + self.size//2)
             center_y = int(self.y + self.size//2)
@@ -194,6 +217,23 @@ class Player:
             else:
                 # Cercle normal
                 pygame.draw.circle(screen, shield_border_color, (center_x, center_y), current_radius, 2)
+        
+        # === EFFET DE BOUCLIER DE LA COMPÉTENCE ===
+        if hasattr(self, 'shield_points') and self.shield_points > 0:
+            center_x = int(self.x + self.size//2)
+            center_y = int(self.y + self.size//2)
+            shield_radius = int(self.size * 0.6)  # Plus petit que le bouclier temporaire
+            
+            # Couleur dorée/orange pour le bouclier de compétence
+            shield_opacity = min(255, int(255 * (self.shield_points / getattr(self, 'max_shield_points', 100))))
+            shield_color = (255, 215, 0, shield_opacity)  # Doré avec transparence
+            shield_border_color = (255, 165, 0)  # Orange pour le contour
+            
+            # Dessiner le bouclier de compétence
+            if self.config.ENABLE_ANTIALIASING:
+                pygame.gfxdraw.aacircle(screen, center_x, center_y, shield_radius, shield_border_color)
+            else:
+                pygame.draw.circle(screen, shield_border_color, (center_x, center_y), shield_radius, 1)
         
         # === DESSIN DU JOUEUR ===
         if self.has_image and self.animation_frames and self.animation_frames_left:
@@ -1465,7 +1505,7 @@ class Heart(Collectible):
             pygame.draw.circle(screen, (255, 0, 0), (screen_x, screen_y), scaled_size // 2)
             pygame.draw.circle(screen, (255, 100, 100), (screen_x, screen_y), scaled_size // 4)
     
-    def on_collect(self, player):
+    def on_collect(self, player, game=None):
         """Restaure la vie du joueur"""
         old_health = player.health
         player.health = min(player.max_health, player.health + self.config.HEART_HEAL_AMOUNT)
@@ -1474,6 +1514,122 @@ class Heart(Collectible):
             print(f"💚 Coeur collecté ! +{healed} points de vie (vie: {player.health}/{player.max_health})")
         else:
             print(f"💚 Coeur collecté mais vie déjà au maximum ({player.health}/{player.max_health})")
+
+
+class Coin(Collectible):
+    """Objet collectible pièce animée qui donne des points/monnaie"""
+    
+    def __init__(self, x, y, config, throw_direction=None):
+        super().__init__(x, y, config)
+        self.size = 32  # Taille de la pièce
+        self.animation_timer = 0
+        self.current_frame = 0
+        self.frames_per_sprite = config.COIN_ANIMATION_SPEED  # Utiliser la config
+        self.sprite_frames = []
+        
+        # Système de trajectoire de "jet"
+        self.is_being_thrown = True  # Indique si la pièce est en cours de jet
+        self.throw_timer = 0
+        self.throw_duration = config.COIN_THROW_DURATION  # Utiliser la config
+        self.throw_friction = config.COIN_THROW_FRICTION  # Utiliser la config
+        
+        # Vitesse initiale de jet dans une direction aléatoire
+        if throw_direction:
+            # Direction spécifique fournie
+            self.throw_vel_x = throw_direction[0]
+            self.throw_vel_y = throw_direction[1]
+        else:
+            # Direction aléatoire
+            import math
+            import random
+            angle = random.uniform(0, 2 * math.pi)
+            throw_speed = random.uniform(config.COIN_THROW_SPEED_MIN, config.COIN_THROW_SPEED_MAX)
+            self.throw_vel_x = math.cos(angle) * throw_speed
+            self.throw_vel_y = math.sin(angle) * throw_speed
+        
+        # Charger les sprites de la pièce animée
+        try:
+            # Charger l'image complète
+            full_image = pygame.image.load("assets/drops/coin.png").convert_alpha()
+            image_width = full_image.get_width()
+            image_height = full_image.get_height()
+            
+            # Calculer la taille de chaque frame (6 sprites horizontaux)
+            frame_width = image_width // 6
+            frame_height = image_height
+            
+            # Extraire chaque frame
+            for i in range(6):
+                frame_rect = pygame.Rect(i * frame_width, 0, frame_width, frame_height)
+                frame_surface = pygame.Surface((frame_width, frame_height), pygame.SRCALPHA)
+                frame_surface.blit(full_image, (0, 0), frame_rect)
+                
+                # Redimensionner la frame à la taille désirée
+                scaled_frame = pygame.transform.scale(frame_surface, (self.size, self.size))
+                self.sprite_frames.append(scaled_frame)
+            
+            self.has_animation = True
+            print(f"🪙 Animation de pièce chargée : {len(self.sprite_frames)} frames")
+            
+        except (pygame.error, FileNotFoundError):
+            print("Image assets/drops/coin.png non trouvée, utilisation du rendu par défaut")
+            self.has_animation = False
+    
+    def update(self, player_x, player_y):
+        """Met à jour la pièce avec animation de rotation et trajectoire de jet"""
+        # Gestion de la trajectoire de jet
+        if self.is_being_thrown:
+            self.throw_timer += 1
+            
+            # Appliquer la vitesse de jet
+            self.x += self.throw_vel_x
+            self.y += self.throw_vel_y
+            
+            # Appliquer la friction
+            self.throw_vel_x *= self.throw_friction
+            self.throw_vel_y *= self.throw_friction
+            
+            # Arrêter le jet après la durée définie
+            if self.throw_timer >= self.throw_duration:
+                self.is_being_thrown = False
+                self.throw_vel_x = 0
+                self.throw_vel_y = 0
+        else:
+            # Comportement normal de collectible (attraction magnétique, etc.)
+            super().update(player_x, player_y)
+        
+        # Animation des sprites (toujours active)
+        if self.has_animation:
+            self.animation_timer += 1
+            if self.animation_timer >= self.frames_per_sprite:
+                self.animation_timer = 0
+                self.current_frame = (self.current_frame + 1) % len(self.sprite_frames)
+    
+    def draw(self, screen, camera_x, camera_y):
+        """Dessine la pièce animée avec l'offset de caméra"""
+        screen_x = int(self.x - camera_x)
+        screen_y = int(self.y - camera_y)
+        
+        if self.has_animation and self.sprite_frames:
+            # Dessiner la frame actuelle
+            current_sprite = self.sprite_frames[self.current_frame]
+            image_rect = current_sprite.get_rect()
+            image_rect.center = (screen_x, screen_y)
+            screen.blit(current_sprite, image_rect)
+        else:
+            # Rendu par défaut : cercle doré
+            pygame.draw.circle(screen, (255, 215, 0), (screen_x, screen_y), self.size // 2)
+            pygame.draw.circle(screen, (255, 255, 0), (screen_x, screen_y), self.size // 3)
+            pygame.draw.circle(screen, (255, 215, 0), (screen_x, screen_y), self.size // 6)
+    
+    def on_collect(self, player, game=None):
+        """Donne des points/monnaie au joueur"""
+        # Utiliser la valeur de la config
+        if game:
+            game.score += self.config.COIN_VALUE
+            print(f"🪙 Pièce collectée ! +{self.config.COIN_VALUE} points (Score total: {game.score})")
+        else:
+            print(f"🪙 Pièce collectée ! +{self.config.COIN_VALUE} points")
 
 
 class OrbDeathEffect:

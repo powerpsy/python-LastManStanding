@@ -373,6 +373,50 @@ class RegenSkill(Skill):
             self.regen_timer = 0
 
 
+class ShieldSkill(Skill):
+    """Compétence de bouclier - Donne des points de bouclier temporaires"""
+    
+    def __init__(self):
+        config = SkillConfig.SHIELD
+        super().__init__(config["name"], config["description"], max_level=config["max_level"])
+        self.config = config
+        self.regen_timer = 0
+        self.combat_timer = 0  # Timer pour détecter quand on est hors combat
+    
+    def apply_effect(self, player, config):
+        """Applique l'effet de bouclier"""
+        # Incrémenter le timer de combat
+        self.combat_timer += 1
+        
+        # Obtenir les statistiques selon le niveau
+        max_shield = get_skill_stat("Shield", "shield", self.level)
+        regen_rate = get_skill_stat("Shield", "regen_rate", self.level)
+        regen_delay = get_skill_stat("Shield", "regen_delay", self.level)
+        
+        # Initialiser le bouclier si pas encore fait
+        if not hasattr(player, 'shield_points'):
+            player.shield_points = max_shield
+            player.max_shield_points = max_shield
+        else:
+            # Mettre à jour le max si le niveau a changé
+            player.max_shield_points = max_shield
+        
+        # Régénération du bouclier (seulement si pas au maximum et hors combat)
+        if (player.shield_points < player.max_shield_points and 
+            self.combat_timer >= regen_delay):
+            
+            self.regen_timer += 1
+            if self.regen_timer >= regen_rate:
+                regen_amount = 1  # Régénère 1 point à la fois
+                player.shield_points = min(player.max_shield_points, 
+                                         player.shield_points + regen_amount)
+                self.regen_timer = 0
+    
+    def reset_combat_timer(self):
+        """Remet à zéro le timer de combat (appelé quand le joueur prend des dégâts)"""
+        self.combat_timer = 0
+
+
 class MagnetSkill(Skill):
     """Compétence d'aimant - Attire les objets collectibles"""
     
@@ -499,3 +543,9 @@ class SkillManager:
                 "strength": magnet_skill.get_magnet_strength()
             }
         return None
+    
+    def notify_damage_taken(self):
+        """Notifie toutes les compétences qu'un dégât a été pris"""
+        for skill in self.skills:
+            if skill.is_active and hasattr(skill, 'reset_combat_timer'):
+                skill.reset_combat_timer()
