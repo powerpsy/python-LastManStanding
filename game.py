@@ -4,7 +4,7 @@ import random
 import math
 from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
 from background import Background
-from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill
+from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill, MagnetSkill
 from transitions import TransitionManager, TRANSITION_TYPES
 
 class Game:
@@ -46,6 +46,11 @@ class Game:
         # Police adaptative
         self.font = pygame.font.Font(None, int(36 * self.config.font_scale))
         self.small_font = pygame.font.Font(None, int(24 * self.config.font_scale))
+        
+        # Cache pour les images d'armes et de compétences
+        self.weapon_images = {}
+        self.skill_images = {}
+        self._load_weapon_and_skill_images()
         
         # État du jeu
         self.running = True
@@ -956,13 +961,47 @@ class Game:
     
     def update_collectibles(self):
         """Met à jour tous les objets collectibles"""
+        # Obtenir les effets de l'aimant s'il est actif
+        magnet_effect = self.skill_manager.get_magnet_effect()
+        
         for collectible in self.collectibles[:]:
+            # Appliquer l'attraction magnétique si l'aimant est actif
+            if magnet_effect:
+                self.apply_magnet_effect(collectible, magnet_effect)
+            
             collectible.update(self.player.x, self.player.y)
             
             # Vérifier si l'objet a été collecté
             if collectible.is_collected:
                 collectible.on_collect(self.player)
                 self.collectibles.remove(collectible)
+    
+    def apply_magnet_effect(self, collectible, magnet_effect):
+        """Applique l'effet magnétique sur un objet collectible"""
+        import math
+        
+        # Calculer la distance entre le joueur et l'objet
+        player_center_x = self.player.x + self.player.size // 2
+        player_center_y = self.player.y + self.player.size // 2
+        collectible_center_x = collectible.x + collectible.size // 2
+        collectible_center_y = collectible.y + collectible.size // 2
+        
+        distance_x = player_center_x - collectible_center_x
+        distance_y = player_center_y - collectible_center_y
+        distance = math.sqrt(distance_x**2 + distance_y**2)
+        
+        # Si l'objet est dans la portée de l'aimant
+        if distance <= magnet_effect["range"] and distance > 0:
+            # Calculer la direction normalisée
+            direction_x = distance_x / distance
+            direction_y = distance_y / distance
+            
+            # Appliquer la force d'attraction (plus fort quand plus proche)
+            attraction_force = magnet_effect["strength"] * (magnet_effect["range"] - distance) / magnet_effect["range"]
+            
+            # Déplacer l'objet vers le joueur
+            collectible.x += direction_x * attraction_force * 10  # Multiplier pour effet visible
+            collectible.y += direction_y * attraction_force * 10
     
     def check_collision(self, obj1, obj2):
         """Vérifie la collision circulaire entre deux objets"""
@@ -1495,6 +1534,44 @@ class Game:
         # Afficher la minimap sur l'écran principal
         self.screen.blit(minimap_surface, (minimap_x, minimap_y))
     
+    def _load_weapon_and_skill_images(self):
+        """Charge et met en cache les images d'armes et de compétences"""
+        # Charger les images d'armes
+        weapon_files = {
+            "Canon": "canon.png",
+            "Orb": "orb.png", 
+            "Lightning": "lightning.png",
+            "Beam": "beam.png"
+        }
+        
+        for weapon_name, filename in weapon_files.items():
+            try:
+                image_path = f"assets/weapons/{filename}"
+                image = pygame.image.load(image_path).convert_alpha()
+                self.weapon_images[weapon_name] = image
+                print(f"✅ Image d'arme chargée: {weapon_name} ({filename})")
+            except (pygame.error, FileNotFoundError) as e:
+                print(f"❌ Impossible de charger l'image d'arme {weapon_name}: {e}")
+                self.weapon_images[weapon_name] = None
+        
+        # Charger les images de compétences
+        skill_files = {
+            "Vitesse": "vitesse.png",
+            "Régénération": "régénération.png", 
+            "Résistance": "bouclier.png",  # bouclier.png pour Résistance
+            "Aimant": "aimant.png"  # Si elle existe
+        }
+        
+        for skill_name, filename in skill_files.items():
+            try:
+                image_path = f"assets/competences/{filename}"
+                image = pygame.image.load(image_path).convert_alpha()
+                self.skill_images[skill_name] = image
+                print(f"✅ Image de compétence chargée: {skill_name} ({filename})")
+            except (pygame.error, FileNotFoundError) as e:
+                print(f"❌ Impossible de charger l'image de compétence {skill_name}: {e}")
+                self.skill_images[skill_name] = None
+    
     def draw_skills_screen(self):
         """Affiche l'écran graphique des compétences et armes obtenues"""
         # Overlay semi-transparent (75% de transparence sur 3/4 de l'écran)
@@ -1507,41 +1584,53 @@ class Game:
         overlay.set_alpha(192)  # 75% de 255 = 192 (plus opaque et lisible)
         self.screen.blit(overlay, (overlay_x, overlay_y))
 
-        # Titre
+        # Titre principal
         title = "Compétences & Armes"
         title_surface = self.font.render(title, True, self.config.WHITE)
-        title_rect = title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 60))
+        title_rect = title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 80))  # Plus bas pour laisser de l'espace
         self.screen.blit(title_surface, title_rect)
 
-        # Affichage des armes (7 slots)
-        slot_size = 64
-        slot_margin = 24
+        # Label section Armes
+        weapons_label = "ARMES"
+        weapons_label_surface = self.small_font.render(weapons_label, True, self.config.CYAN)
+        weapons_label_rect = weapons_label_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 300))
+        self.screen.blit(weapons_label_surface, weapons_label_rect)
+
+        # Affichage des armes (7 slots) - Agrandies de 50% supplémentaires et encore plus bas
+        slot_size = 192  # Agrandies de 50% : 128 → 192
+        slot_margin = 40  # Ajusté pour la nouvelle taille encore plus grande
         total_slots = 7
         start_x = (self.config.WINDOW_WIDTH - (total_slots * slot_size + (total_slots-1)*slot_margin)) // 2
-        y = 150
+        y = 360  # Encore plus bas pour être parfaitement dans le cadre
         for i in range(total_slots):
             rect = pygame.Rect(start_x + i*(slot_size+slot_margin), y, slot_size, slot_size)
             pygame.draw.rect(self.screen, (80,80,80), rect, border_radius=12)
-            # Si arme présente, dessiner une icône (exemple: orbe, éclair, etc.)
-            if hasattr(self, 'weapons') and i < len(self.weapons):
-                self.draw_weapon_icon(self.weapons[i], rect)
+            # Si arme présente, dessiner une icône
+            if i < len(self.weapon_manager.weapons):
+                self.draw_weapon_icon(self.weapon_manager.weapons[i], rect)
             else:
                 pygame.draw.rect(self.screen, (40,40,40), rect.inflate(-16,-16), border_radius=8)
 
-        # Affichage des compétences (14 slots, 2 lignes de 7)
-        skill_slot_size = 48
-        skill_slot_margin = 18
+        # Label section Compétences
+        skills_label = "PASSIFS"
+        skills_label_surface = self.small_font.render(skills_label, True, self.config.PURPLE)
+        skills_label_rect = skills_label_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 650))
+        self.screen.blit(skills_label_surface, skills_label_rect)
+
+        # Affichage des compétences (14 slots, 2 lignes de 7) - Agrandies de 50% et encore plus bas
+        skill_slot_size = 144  # Agrandies de 50% : 96 → 144
+        skill_slot_margin = 32  # Ajusté pour la nouvelle taille encore plus grande
         total_skills = 14
         start_x = (self.config.WINDOW_WIDTH - (7 * skill_slot_size + 6*skill_slot_margin)) // 2
-        y_skills = 270
+        y_skills = 710  # Encore plus bas pour être parfaitement dans le cadre avec les nouvelles tailles
         for i in range(total_skills):
             row = i // 7
             col = i % 7
             rect = pygame.Rect(start_x + col*(skill_slot_size+skill_slot_margin), y_skills + row*(skill_slot_size+skill_slot_margin), skill_slot_size, skill_slot_size)
             pygame.draw.rect(self.screen, (100,100,100), rect, border_radius=10)
             # Si compétence présente, dessiner une icône
-            if hasattr(self, 'skills') and i < len(self.skills):
-                self.draw_skill_icon(self.skills[i], rect)
+            if i < len(self.skill_manager.skills):
+                self.draw_skill_icon(self.skill_manager.skills[i], rect)
             else:
                 pygame.draw.rect(self.screen, (60,60,60), rect.inflate(-12,-12), border_radius=8)
 
@@ -1552,26 +1641,144 @@ class Game:
         self.screen.blit(text_surface, text_rect)
 
     def draw_weapon_icon(self, weapon, rect):
-        # Exemple d'icône graphique selon le type d'arme (à adapter selon vos armes)
-        center = rect.center
-        if weapon == "orb":
-            pygame.draw.circle(self.screen, (0,200,255), center, rect.width//3)
-        elif weapon == "lightning":
-            pygame.draw.polygon(self.screen, (255,255,0), [
-                (center[0], center[1]-rect.height//4),
-                (center[0]+rect.width//6, center[1]),
-                (center[0], center[1]+rect.height//4),
-                (center[0]-rect.width//8, center[1]),
-            ])
-        # Ajouter d'autres armes ici
+        """Dessine l'icône d'une arme selon son type en utilisant les vraies images"""
+        # Essayer d'utiliser l'image chargée
+        weapon_image = self.weapon_images.get(weapon.name)
+        
+        if weapon_image:
+            # Redimensionner l'image pour qu'elle remplisse presque tout le rect (avec une petite marge)
+            margin = 8  # Marge de 8px de chaque côté
+            target_size = (rect.width - margin*2, rect.height - margin*2)
+            scaled_image = pygame.transform.scale(weapon_image, target_size)
+            
+            # Centrer l'image dans le rect
+            image_rect = scaled_image.get_rect()
+            image_rect.center = rect.center
+            self.screen.blit(scaled_image, image_rect)
         else:
-            pygame.draw.rect(self.screen, (180,180,180), rect.inflate(-20,-20), border_radius=6)
+            # Fallback sur les dessins géométriques si l'image n'est pas disponible
+            center = rect.center
+            
+            if weapon.name == "Orb":
+                pygame.draw.circle(self.screen, (0, 200, 255), center, rect.width//3)
+                pygame.draw.circle(self.screen, (255, 255, 255), center, rect.width//3, 2)
+            elif weapon.name == "Lightning":
+                pygame.draw.polygon(self.screen, (255, 255, 0), [
+                    (center[0], center[1]-rect.height//3),
+                    (center[0]+rect.width//4, center[1]-rect.height//6),
+                    (center[0]+rect.width//6, center[1]),
+                    (center[0], center[1]+rect.height//3),
+                    (center[0]-rect.width//6, center[1]+rect.height//6),
+                    (center[0]-rect.width//4, center[1]-rect.height//6),
+                ])
+            elif weapon.name == "Beam":
+                pygame.draw.rect(self.screen, (255, 100, 100), 
+                               (center[0]-rect.width//3, center[1]-rect.height//8, 
+                                rect.width//1.5, rect.height//4))
+                pygame.draw.rect(self.screen, (255, 200, 200), 
+                               (center[0]-rect.width//4, center[1]-rect.height//12, 
+                                rect.width//2, rect.height//6))
+            elif weapon.name == "Canon":
+                pygame.draw.circle(self.screen, (150, 150, 150), center, rect.width//3)
+                pygame.draw.circle(self.screen, (100, 100, 100), center, rect.width//4)
+                pygame.draw.circle(self.screen, (200, 200, 200), center, rect.width//3, 2)
+            else:
+                pygame.draw.rect(self.screen, (180, 180, 180), rect.inflate(-20, -20), border_radius=6)
+        
+        # Afficher le niveau de l'arme dans le coin avec un fond semi-transparent
+        level_text = str(weapon.level)
+        level_surface = self.small_font.render(level_text, True, self.config.WHITE)
+        
+        # Créer un fond semi-transparent pour le niveau
+        level_bg_size = max(level_surface.get_width() + 4, level_surface.get_height() + 4)
+        level_bg = pygame.Surface((level_bg_size, level_bg_size))
+        level_bg.set_alpha(128)  # Semi-transparent
+        level_bg.fill((0, 0, 0))  # Fond noir
+        
+        # Positionner le fond et le texte
+        level_bg_rect = level_bg.get_rect()
+        level_bg_rect.bottomright = (rect.right - 2, rect.bottom - 2)
+        self.screen.blit(level_bg, level_bg_rect)
+        
+        level_rect = level_surface.get_rect()
+        level_rect.center = level_bg_rect.center
+        self.screen.blit(level_surface, level_rect)
 
     def draw_skill_icon(self, skill, rect):
-        # Exemple d'icône graphique selon le type de compétence (à adapter selon vos skills)
-        center = rect.center
-        pygame.draw.circle(self.screen, (120,255,120), center, rect.width//3)
-        # Ajouter d'autres styles selon le skill
+        """Dessine l'icône d'une compétence selon son type en utilisant les vraies images"""
+        # Essayer d'utiliser l'image chargée
+        skill_image = self.skill_images.get(skill.name)
+        
+        if skill_image:
+            # Redimensionner l'image pour qu'elle remplisse presque tout le rect (avec une petite marge)
+            margin = 6  # Marge un peu plus petite pour les compétences
+            target_size = (rect.width - margin*2, rect.height - margin*2)
+            scaled_image = pygame.transform.scale(skill_image, target_size)
+            
+            # Centrer l'image dans le rect
+            image_rect = scaled_image.get_rect()
+            image_rect.center = rect.center
+            self.screen.blit(scaled_image, image_rect)
+        else:
+            # Fallback sur les dessins géométriques si l'image n'est pas disponible
+            center = rect.center
+            
+            if skill.name == "Vitesse":
+                arrow_points = [
+                    (center[0]-rect.width//4, center[1]),
+                    (center[0]+rect.width//4, center[1]-rect.height//4),
+                    (center[0]+rect.width//6, center[1]),
+                    (center[0]+rect.width//4, center[1]+rect.height//4)
+                ]
+                pygame.draw.polygon(self.screen, (100, 255, 100), arrow_points)
+            elif skill.name == "Régénération":
+                pygame.draw.rect(self.screen, (255, 100, 100), 
+                               (center[0]-rect.width//8, center[1]-rect.height//3, 
+                                rect.width//4, rect.height//1.5))
+                pygame.draw.rect(self.screen, (255, 100, 100), 
+                               (center[0]-rect.width//3, center[1]-rect.height//8, 
+                                rect.width//1.5, rect.width//4))
+            elif skill.name == "Aimant":
+                pygame.draw.rect(self.screen, (255, 150, 0), 
+                               (center[0]-rect.width//3, center[1]-rect.height//4, 
+                                rect.width//8, rect.height//2))
+                pygame.draw.rect(self.screen, (255, 150, 0), 
+                               (center[0]+rect.width//4, center[1]-rect.height//4, 
+                                rect.width//8, rect.height//2))
+                pygame.draw.rect(self.screen, (255, 150, 0), 
+                               (center[0]-rect.width//3, center[1]+rect.height//6, 
+                                rect.width//1.5, rect.height//8))
+            elif skill.name == "Résistance":
+                shield_points = [
+                    (center[0], center[1]-rect.height//3),
+                    (center[0]+rect.width//3, center[1]-rect.height//6),
+                    (center[0]+rect.width//3, center[1]+rect.height//6),
+                    (center[0], center[1]+rect.height//3),
+                    (center[0]-rect.width//3, center[1]+rect.height//6),
+                    (center[0]-rect.width//3, center[1]-rect.height//6)
+                ]
+                pygame.draw.polygon(self.screen, (100, 150, 255), shield_points)
+            else:
+                pygame.draw.circle(self.screen, (120, 255, 120), center, rect.width//3)
+        
+        # Afficher le niveau de la compétence dans le coin avec un fond semi-transparent
+        level_text = str(skill.level)
+        level_surface = self.small_font.render(level_text, True, self.config.WHITE)
+        
+        # Créer un fond semi-transparent pour le niveau
+        level_bg_size = max(level_surface.get_width() + 4, level_surface.get_height() + 4)
+        level_bg = pygame.Surface((level_bg_size, level_bg_size))
+        level_bg.set_alpha(128)  # Semi-transparent
+        level_bg.fill((0, 0, 0))  # Fond noir
+        
+        # Positionner le fond et le texte
+        level_bg_rect = level_bg.get_rect()
+        level_bg_rect.bottomright = (rect.right - 2, rect.bottom - 2)
+        self.screen.blit(level_bg, level_bg_rect)
+        
+        level_rect = level_surface.get_rect()
+        level_rect.center = level_bg_rect.center
+        self.screen.blit(level_surface, level_rect)
     
     def trigger_upgrade_screen(self):
         """Affiche l'écran de choix d'upgrade à la montée de niveau"""
@@ -2125,6 +2332,12 @@ class Game:
             else:
                 print("Impossible d'ajouter Régénération : limite de compétences atteinte")
         
+        elif upgrade_id == "skill_magnet":
+            if self.skill_manager.add_skill(MagnetSkill):
+                print("COMPÉTENCE AIMANT DÉBLOQUÉE !")
+            else:
+                print("Impossible d'ajouter Aimant : limite de compétences atteinte")
+        
         # === AMÉLIORATIONS DE COMPÉTENCES ===
         elif upgrade_id.startswith("upgrade_skill_"):
             skill_name = upgrade_id.replace("upgrade_skill_", "").capitalize()
@@ -2191,6 +2404,14 @@ class Game:
                 "id": "skill_regen", 
                 "name": "COMPÉTENCE|RÉGÉNÉRATION", 
                 "description": "Nouvelle compétence: Récupère la vie au fil du temps !",
+                "is_new_weapon": True
+            })
+        
+        if not self.skill_manager.has_skill("Aimant") and len(self.skill_manager.skills) < 14:
+            available_upgrades.append({
+                "id": "skill_magnet", 
+                "name": "COMPÉTENCE|AIMANT", 
+                "description": "Nouvelle compétence: Attire automatiquement les objets collectibles !",
                 "is_new_weapon": True
             })
         

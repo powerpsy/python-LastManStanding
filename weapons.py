@@ -373,6 +373,33 @@ class RegenSkill(Skill):
             self.regen_timer = 0
 
 
+class MagnetSkill(Skill):
+    """Compétence d'aimant - Attire les objets collectibles"""
+    
+    def __init__(self):
+        config = SkillConfig.MAGNET
+        super().__init__(config["name"], config["description"], max_level=config["max_level"])
+        self.config = config
+    
+    def apply_effect(self, player, config):
+        """Applique l'effet magnétique sur les objets collectibles"""
+        # Cette méthode sera appelée par le SkillManager
+        # L'attraction sera gérée dans game.py via get_magnet_range() et get_magnet_strength()
+        pass
+    
+    def get_magnet_range(self):
+        """Retourne la portée de l'aimant selon le niveau"""
+        if self.level == 0:
+            return 0
+        return self.config["range_progression"][self.level]
+    
+    def get_magnet_strength(self):
+        """Retourne la force d'attraction selon le niveau"""
+        if self.level == 0:
+            return 0
+        return self.config["strength_progression"][self.level]
+
+
 class WeaponManager:
     """Gestionnaire des armes du joueur"""
     
@@ -455,3 +482,20 @@ class SkillManager:
     def has_skill(self, skill_name):
         """Vérifie si le joueur possède une compétence"""
         return any(skill.name == skill_name for skill in self.skills)
+    
+    def get_skill(self, skill_name):
+        """Retourne une compétence spécifique par nom"""
+        for skill in self.skills:
+            if skill.name == skill_name:
+                return skill
+        return None
+    
+    def get_magnet_effect(self):
+        """Retourne les effets de l'aimant (portée et force) ou None si pas d'aimant"""
+        magnet_skill = self.get_skill("Aimant")
+        if magnet_skill and magnet_skill.is_active:
+            return {
+                "range": magnet_skill.get_magnet_range(),
+                "strength": magnet_skill.get_magnet_strength()
+            }
+        return None
