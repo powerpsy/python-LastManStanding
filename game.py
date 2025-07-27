@@ -510,8 +510,13 @@ class Game:
             self.enemies_spawned = 0
             
             # Déclencher l'écran d'upgrade seulement à partir de la vague 3
-            if self.wave_number >= 3:
+            # MAIS pas si le mode "Always Skip" est activé
+            if self.wave_number >= 3 and not self.always_skip_mode:
                 self.trigger_upgrade_screen()
+            elif self.wave_number >= 3 and self.always_skip_mode:
+                # Mode Always Skip activé - donner un bonus de score directement
+                print("🚀 Always Skip activé - Level up automatique avec bonus XP")
+                self.score += 1000  # Bonus de score
             
             # Réduction du délai entre les ennemis (plus difficile)
             reduction_factor = self.config.ENEMY_SPAWN_DELAY_REDUCTION ** (self.wave_number - 1)
@@ -1256,17 +1261,12 @@ class Game:
         wave_surface = self.font.render(wave_text, True, self.config.WHITE)
         self.screen.blit(wave_surface, (30, 60))
         
-        # Afficher le score
-        score_text = f"Score: {self.score}"
-        score_surface = self.font.render(score_text, True, self.config.YELLOW)
-        self.screen.blit(score_surface, (30, 90))
-        
         # Afficher les armes du joueur (sans caractères spéciaux, avec espacement)
         weapons_text = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
         weapons_surface = self.small_font.render(weapons_text, True, self.config.CYAN)
-        self.screen.blit(weapons_surface, (30, 130))  # Décalé vers le bas pour le score
+        self.screen.blit(weapons_surface, (30, 100))  # Remettre la position originale
         
-        y_offset = 160  # Espacement augmenté pour éviter superposition
+        y_offset = 130  # Remettre la position originale
         for weapon in self.weapon_manager.weapons:
             weapon_text = f"  {weapon.name} Niv.{weapon.level}"
             weapon_surface = self.small_font.render(weapon_text, True, self.config.WHITE)
@@ -1869,12 +1869,6 @@ class Game:
     
     def trigger_upgrade_screen(self):
         """Affiche l'écran de choix d'upgrade à la montée de niveau"""
-        # Si le mode "Always Skip" est activé, passer directement
-        if self.always_skip_mode:
-            print("🚀 Always Skip activé - Level up automatique avec bonus XP")
-            self.score += 1000  # Bonus de score
-            return
-        
         self.upgrade_options = self.get_smart_upgrade_options()
         
         # Démarrer la transition vers l'écran d'upgrade

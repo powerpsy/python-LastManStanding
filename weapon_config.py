@@ -117,7 +117,7 @@ class SkillConfig:
         
         # Progressions
         "range_progression": [100, 200, 300, 400],
-        "strength_progression": [0, 0.1, 0.15, 0.2]
+        "strength_progression": [0.1, 0.2, 0.5, 1]
     }
     
     # === BOUCLIER ===

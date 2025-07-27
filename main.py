@@ -49,6 +49,7 @@ def main():
             print("🧪 MODE TEST ALWAYS SKIP ACTIVÉ")
             # Simuler qu'on a atteint tous les niveaux max (simplifié)
             game.level = 50  # Niveau élevé
+            game.always_skip_mode = True  # Activer le mode always skip
             # Cette ligne sera décommentée pour le test réel
             # game.upgrade_options = []  # Pas d'options disponibles
         

@@ -299,7 +299,7 @@ class Config:
         
         # Paramètres des pièces (coins)
         self.COIN_VALUE = 10  # Points gagnés par pièce collectée
-        self.COIN_ANIMATION_SPEED = 8  # Vitesse d'animation (frames par sprite)
+        self.COIN_ANIMATION_SPEED = 5  # Vitesse d'animation (frames par sprite)
         self.COIN_MAX_ON_FIELD = 200  # Nombre maximum de pièces sur le terrain
         self.COIN_THROW_DURATION = 10  # Durée du jet en frames (0.5 sec à 60fps)
         self.COIN_THROW_SPEED_MIN = 1  # Vitesse minimum de jet
