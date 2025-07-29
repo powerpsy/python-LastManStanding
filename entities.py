@@ -68,6 +68,13 @@ class Player:
                 self.frame_sequence = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Séquence 1-2-3-4-5-6-7-8-9 en boucle
                 print(f"Chargement sprite type 2 : player3.png (9 frames, séquence 1-2-3-4-5-6-7-8-9)")
                 
+            elif sprite_type == 3:
+                # Type 3 : player4.png (5 frames, animation ping-pong 1-2-3-4-5-4-3-2-1)
+                spritesheet = pygame.image.load("assets/player/player4.png").convert_alpha()
+                num_frames = 5
+                self.frame_sequence = [0, 1, 2, 3, 4, 3, 2, 1]  # Séquence ping-pong 1-2-3-4-5-4-3-2-1 en boucle
+                print(f"Chargement sprite type 3 : player4.png (5 frames, séquence ping-pong 1-2-3-4-5-4-3-2-1)")
+                
             else:
                 print(f"Type de sprite non supporté : {sprite_type}, utilisation du type 1 par défaut")
                 return self._load_player_sprite(1)

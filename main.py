@@ -24,8 +24,9 @@ def main():
     # Type de sprite joueur à utiliser :
     # 1 = player2.png (5 frames horizontales, animation séquence 5-4-3-2-1 en boucle)
     # 2 = player3.png (9 frames horizontales, animation séquence 1-2-3-4-5-6-7-8-9 en boucle)
-    # Les deux animations ont une durée d'environ 1 seconde pour une fluidité cohérente
-    player_sprite_type = 2  # Choisir 1 ou 2
+    # 3 = player4.png (5 frames horizontales, animation ping-pong 1-2-3-4-5-4-3-2-1 en boucle)
+    # Les animations ont une durée d'environ 1 seconde pour une fluidité cohérente
+    player_sprite_type = 3  # Choisir 1, 2 ou 3
     
     # Mode test "Always Skip" - pour tester rapidement le système
     test_always_skip = False  # Mettre True pour tester

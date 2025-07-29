@@ -352,6 +352,39 @@ class Game:
         else:
             self.progression_bar_progress = self.target_progression
 
+    def interpolate_color(self, color1, color2, factor):
+        """Interpole entre deux couleurs RGB selon un facteur (0.0 à 1.0)"""
+        r1, g1, b1 = color1
+        r2, g2, b2 = color2
+        r = int(r1 + (r2 - r1) * factor)
+        g = int(g1 + (g2 - g1) * factor)
+        b = int(b1 + (b2 - b1) * factor)
+        return (r, g, b)
+    
+    def get_health_color(self, health_ratio):
+        """Calcule la couleur de santé progressivement du vert au rouge"""
+        # Couleurs de référence
+        green = (0, 255, 0)    # Vert pur
+        yellow = (255, 255, 0) # Jaune pur
+        red = (255, 0, 0)      # Rouge pur
+        
+        if health_ratio > 0.66:  # Zone verte (66% - 100%)
+            # Interpolation du vert pur vers le jaune-vert
+            factor = (1.0 - health_ratio) / 0.34  # 0.0 à 1.0 quand on va de 100% à 66%
+            yellow_green = (200, 255, 0)  # Jaune-vert
+            return self.interpolate_color(green, yellow_green, factor)
+        elif health_ratio > 0.33:  # Zone jaune (33% - 66%)
+            # Interpolation du jaune-vert vers l'orange
+            factor = (0.66 - health_ratio) / 0.33  # 0.0 à 1.0 quand on va de 66% à 33%
+            yellow_green = (200, 255, 0)
+            orange = (255, 165, 0)
+            return self.interpolate_color(yellow_green, orange, factor)
+        else:  # Zone rouge (0% - 33%)
+            # Interpolation de l'orange vers le rouge pur
+            factor = (0.33 - health_ratio) / 0.33  # 0.0 à 1.0 quand on va de 33% à 0%
+            orange = (255, 165, 0)
+            return self.interpolate_color(orange, red, factor)
+
     def update_health_shield_animation(self):
         """Met à jour l'animation des barres de santé et de bouclier"""
         # Calculer les ratios cibles
@@ -1296,13 +1329,8 @@ class Game:
         # Mettre à jour l'animation des barres de santé et bouclier
         self.update_health_shield_animation()
         
-        # Calculer la couleur de santé selon le ratio
-        if self.target_health_progress > 0.7:
-            health_color = self.config.GREEN
-        elif self.target_health_progress > 0.3:
-            health_color = self.config.YELLOW
-        else:
-            health_color = self.config.RED
+        # Calculer la couleur de santé avec transition progressive
+        health_color = self.get_health_color(self.target_health_progress)
         
         # Calculer les dimensions et position pour uniformiser avec la barre XP
         # Même calcul que dans draw_progression_bar()
@@ -1341,13 +1369,14 @@ class Game:
             if shine_rect.width > 0 and shine_rect.height > 0:
                 shine_surface = pygame.Surface((shine_rect.width, shine_rect.height), pygame.SRCALPHA)
                 shine_surface.set_alpha(60)  # Plus subtil pour la santé
-                # Couleur de brillance adaptée à la couleur de santé
-                if self.target_health_progress > 0.7:
-                    shine_color = (150, 255, 150)  # Vert clair
-                elif self.target_health_progress > 0.3:
-                    shine_color = (255, 255, 150)  # Jaune clair  
-                else:
-                    shine_color = (255, 150, 150)  # Rouge clair
+                # Couleur de brillance adaptée à la couleur progressive de santé
+                base_health_color = self.get_health_color(self.target_health_progress)
+                # Créer une version plus claire pour la brillance
+                shine_color = (
+                    min(255, base_health_color[0] + 100),  # Rouge + brillance
+                    min(255, base_health_color[1] + 100),  # Vert + brillance
+                    min(255, base_health_color[2] + 100)   # Bleu + brillance
+                )
                 pygame.draw.rect(shine_surface, shine_color, (0, 0, shine_rect.width, shine_rect.height), border_radius=7)
                 self.screen.blit(shine_surface, (shine_rect.x, shine_rect.y))
         
