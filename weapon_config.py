@@ -129,8 +129,8 @@ class SkillConfig:
         "base_regen_rate": 600,  # frames entre les régénérations (10 secondes)
         "base_regen_delay": 300,  # frames avant de commencer à régénérer (5 secondes hors combat)
         
-        # Progressions
-        "shield_progression": [0, 20, 40, 60, 80, 100],  # Points de bouclier par niveau
+        # Progressions (index 0 = niveau 1, index 1 = niveau 2, etc.)
+        "shield_progression": [20, 40, 60, 80, 100],  # Points de bouclier par niveau
         "regen_rate_progression": [600, 550, 500, 450, 400],  # Plus bas = plus rapide
         "regen_delay_progression": [300, 270, 240, 210, 180]  # Délai avant régénération
     }

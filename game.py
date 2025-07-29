@@ -125,6 +125,12 @@ class Game:
         self.progression_bar_progress = 0.0  # Progression actuelle de la barre (0.0 à 1.0)
         self.target_progression = 0.0  # Progression cible pour l'animation
         
+        # Animation des barres de santé et bouclier
+        self.health_bar_progress = 1.0  # Progression actuelle de la barre de santé (0.0 à 1.0)
+        self.target_health_progress = 1.0  # Progression cible pour la barre de santé
+        self.shield_bar_progress = 1.0  # Progression actuelle de la barre de bouclier (0.0 à 1.0)
+        self.target_shield_progress = 1.0  # Progression cible pour la barre de bouclier
+        
         # Anciens champs XP gardés pour compatibilité (mais non utilisés)
         self.xp = 0
         self.xp_to_next_level = 100
@@ -345,6 +351,34 @@ class Game:
             self.progression_bar_progress += (self.target_progression - self.progression_bar_progress) * 0.1
         else:
             self.progression_bar_progress = self.target_progression
+
+    def update_health_shield_animation(self):
+        """Met à jour l'animation des barres de santé et de bouclier"""
+        # Calculer les ratios cibles
+        health_ratio = self.player.health / self.player.max_health
+        self.target_health_progress = health_ratio
+        
+        # Barre de bouclier
+        if hasattr(self.player, 'shield_points') and hasattr(self.player, 'max_shield_points'):
+            if self.player.max_shield_points > 0:
+                shield_ratio = self.player.shield_points / self.player.max_shield_points
+                self.target_shield_progress = shield_ratio
+            else:
+                self.target_shield_progress = 0.0
+        else:
+            self.target_shield_progress = 0.0
+        
+        # Animation fluide pour la barre de santé
+        if abs(self.health_bar_progress - self.target_health_progress) > 0.001:
+            self.health_bar_progress += (self.target_health_progress - self.health_bar_progress) * 0.12
+        else:
+            self.health_bar_progress = self.target_health_progress
+        
+        # Animation fluide pour la barre de bouclier
+        if abs(self.shield_bar_progress - self.target_shield_progress) > 0.001:
+            self.shield_bar_progress += (self.target_shield_progress - self.shield_bar_progress) * 0.12
+        else:
+            self.shield_bar_progress = self.target_shield_progress
 
     def transition_from_skills_screen(self):
         """Démarre une transition de retour au jeu depuis l'écran des compétences"""
@@ -1259,60 +1293,98 @@ class Game:
 
     def draw_ui(self):
         """Dessine l'interface utilisateur"""
-        # Calculer le ratio de santé et la couleur
-        health_ratio = self.player.health / self.player.max_health
-        if health_ratio > 0.7:
+        # Mettre à jour l'animation des barres de santé et bouclier
+        self.update_health_shield_animation()
+        
+        # Calculer la couleur de santé selon le ratio
+        if self.target_health_progress > 0.7:
             health_color = self.config.GREEN
-        elif health_ratio > 0.3:
+        elif self.target_health_progress > 0.3:
             health_color = self.config.YELLOW
         else:
             health_color = self.config.RED
         
-        # Calculer les dimensions et position centrée de la barre de vie (2x plus grande)
-        health_bar_width = self.config.HEALTH_BAR_WIDTH * 2
-        health_bar_height = self.config.HEALTH_BAR_HEIGHT * 2
-        health_bar_x = (self.config.WINDOW_WIDTH - health_bar_width) // 2
-        health_bar_y = 10  # Plus proche du haut de l'écran
+        # Calculer les dimensions et position pour uniformiser avec la barre XP
+        # Même calcul que dans draw_progression_bar()
+        minimap_size = min(self.config.WINDOW_WIDTH // self.config.MINIMAP_SIZE_RATIO, 
+                          self.config.WINDOW_HEIGHT // self.config.MINIMAP_SIZE_RATIO)
+        minimap_space = minimap_size + self.config.MINIMAP_MARGIN + 20  # +20 pour marge supplémentaire
         
-        # Fond de la barre de santé
+        margin_left = 50  # Même marge à gauche que la barre XP
+        margin_right = minimap_space  # Même marge à droite que la barre XP
+        health_bar_width = self.config.WINDOW_WIDTH - margin_left - margin_right  # Même largeur que la barre XP
+        health_bar_height = 25  # Même hauteur que la barre XP
+        health_bar_x = margin_left  # Même position X que la barre XP
+        health_bar_y = 10  # Position en haut de l'écran
+        
+        # === BARRE DE SANTÉ AVEC ANIMATION ===
+        # Fond de la barre de santé avec bords arrondis
         health_bg_rect = pygame.Rect(health_bar_x, health_bar_y, health_bar_width, health_bar_height)
-        pygame.draw.rect(self.screen, self.config.GRAY, health_bg_rect)
+        pygame.draw.rect(self.screen, (40, 40, 40), health_bg_rect, border_radius=12)
         
-        # Barre de santé actuelle
-        health_width = int(health_bar_width * health_ratio)
-        if health_width > 0:
-            health_rect = pygame.Rect(health_bar_x, health_bar_y, health_width, health_bar_height)
-            pygame.draw.rect(self.screen, health_color, health_rect)
+        # Bordure de la barre avec bords arrondis
+        pygame.draw.rect(self.screen, (200, 200, 200), health_bg_rect, 2, border_radius=12)
         
-        # Contour de la barre
-        pygame.draw.rect(self.screen, self.config.WHITE, health_bg_rect, 2)
+        # Barre de santé actuelle avec animation et bords arrondis
+        if self.health_bar_progress > 0:
+            health_width = int(health_bar_width * self.health_bar_progress)
+            # Réduire la largeur pour laisser voir le cadre (marge de 3 pixels de chaque côté)
+            health_rect = pygame.Rect(health_bar_x + 3, health_bar_y + 3, max(0, health_width - 6), max(0, health_bar_height - 6))
+            
+            if health_rect.width > 0 and health_rect.height > 0:
+                pygame.draw.rect(self.screen, health_color, health_rect, border_radius=9)
         
-        # === BARRE DE BOUCLIER ===
+        # Effet de brillance pour la barre de santé
+        if self.health_bar_progress > 0:
+            health_width = int(health_bar_width * self.health_bar_progress)
+            shine_rect = pygame.Rect(health_bar_x + 5, health_bar_y + health_bar_height // 3 + 1, max(0, health_width - 10), max(0, health_bar_height // 3 - 2))
+            if shine_rect.width > 0 and shine_rect.height > 0:
+                shine_surface = pygame.Surface((shine_rect.width, shine_rect.height), pygame.SRCALPHA)
+                shine_surface.set_alpha(60)  # Plus subtil pour la santé
+                # Couleur de brillance adaptée à la couleur de santé
+                if self.target_health_progress > 0.7:
+                    shine_color = (150, 255, 150)  # Vert clair
+                elif self.target_health_progress > 0.3:
+                    shine_color = (255, 255, 150)  # Jaune clair  
+                else:
+                    shine_color = (255, 150, 150)  # Rouge clair
+                pygame.draw.rect(shine_surface, shine_color, (0, 0, shine_rect.width, shine_rect.height), border_radius=7)
+                self.screen.blit(shine_surface, (shine_rect.x, shine_rect.y))
+        
+        # === BARRE DE BOUCLIER AVEC ANIMATION ===
         if hasattr(self.player, 'shield_points') and hasattr(self.player, 'max_shield_points'):
             if self.player.max_shield_points > 0:
-                shield_ratio = self.player.shield_points / self.player.max_shield_points
+                # Position sous la barre de vie avec moins d'espacement
+                shield_bar_y = health_bar_y + health_bar_height + 2  # Réduit de 5 à 2 pixels
+                shield_bar_height = 20  # Légèrement plus fine que la barre de santé (25)
                 
-                # Position sous la barre de vie
-                shield_bar_y = health_bar_y + health_bar_height + 5
-                shield_bar_height = health_bar_height // 2  # Plus petite que la barre de vie
-                
-                # Fond de la barre de bouclier
+                # Fond de la barre de bouclier avec bords arrondis
                 shield_bg_rect = pygame.Rect(health_bar_x, shield_bar_y, health_bar_width, shield_bar_height)
-                pygame.draw.rect(self.screen, self.config.GRAY, shield_bg_rect)
+                pygame.draw.rect(self.screen, (40, 40, 40), shield_bg_rect, border_radius=8)
                 
-                # Barre de bouclier actuelle (couleur dorée)
-                shield_width = int(health_bar_width * shield_ratio)
-                if shield_width > 0:
-                    shield_rect = pygame.Rect(health_bar_x, shield_bar_y, shield_width, shield_bar_height)
-                    shield_color = (255, 215, 0)  # Doré
-                    pygame.draw.rect(self.screen, shield_color, shield_rect)
+                # Bordure de la barre avec bords arrondis
+                pygame.draw.rect(self.screen, (200, 200, 200), shield_bg_rect, 2, border_radius=8)
                 
-                # Contour de la barre de bouclier
-                pygame.draw.rect(self.screen, self.config.WHITE, shield_bg_rect, 1)
-        
-        wave_text = f"Vague {self.wave_number} - Ennemis: {len(self.enemies)}"
-        wave_surface = self.font.render(wave_text, True, self.config.WHITE)
-        self.screen.blit(wave_surface, (30, 60))
+                # Barre de bouclier actuelle avec animation et bords arrondis (couleur dorée)
+                if self.shield_bar_progress > 0:
+                    shield_width = int(health_bar_width * self.shield_bar_progress)
+                    # Réduire la largeur pour laisser voir le cadre (marge de 2 pixels de chaque côté)
+                    shield_rect = pygame.Rect(health_bar_x + 2, shield_bar_y + 2, max(0, shield_width - 4), max(0, shield_bar_height - 4))
+                    
+                    if shield_rect.width > 0 and shield_rect.height > 0:
+                        shield_color = (255, 215, 0)  # Doré
+                        pygame.draw.rect(self.screen, shield_color, shield_rect, border_radius=6)
+                
+                # Effet de brillance pour la barre de bouclier
+                if self.shield_bar_progress > 0:
+                    shield_width = int(health_bar_width * self.shield_bar_progress)
+                    shine_rect = pygame.Rect(health_bar_x + 4, shield_bar_y + shield_bar_height // 3 + 1, max(0, shield_width - 8), max(0, shield_bar_height // 3 - 2))
+                    if shine_rect.width > 0 and shine_rect.height > 0:
+                        shine_surface = pygame.Surface((shine_rect.width, shine_rect.height), pygame.SRCALPHA)
+                        shine_surface.set_alpha(80)  # Plus visible pour le bouclier doré
+                        shine_color = (255, 245, 100)  # Doré clair
+                        pygame.draw.rect(shine_surface, shine_color, (0, 0, shine_rect.width, shine_rect.height), border_radius=4)
+                        self.screen.blit(shine_surface, (shine_rect.x, shine_rect.y))
         
         # Afficher les armes du joueur (sans caractères spéciaux, avec espacement)
         weapons_text = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
@@ -1346,12 +1418,12 @@ class Game:
         score_rect.topright = (self.config.WINDOW_WIDTH - 10, 10)
         self.screen.blit(score_surface, score_rect)
         
-        # Temps de survie en cours
+        # Temps de survie en cours avec plus d'espacement
         survival_time = self.get_survival_time_string()
         time_text = f"Time: {survival_time}"
         time_surface = self.font.render(time_text, True, self.config.CYAN)
         time_rect = time_surface.get_rect()
-        time_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
+        time_rect.topright = (self.config.WINDOW_WIDTH - 10, 60)  # Augmenté de 50 à 60 pour plus d'espacement
         self.screen.blit(time_surface, time_rect)
         
         # Barre de progression basée sur les pièces collectées
@@ -1362,7 +1434,7 @@ class Game:
             always_skip_text = "🚀 ALWAYS SKIP ACTIF"
             always_skip_surface = self.font.render(always_skip_text, True, (100, 255, 100))
             always_skip_rect = always_skip_surface.get_rect()
-            always_skip_rect.topright = (self.config.WINDOW_WIDTH - 10, 90)
+            always_skip_rect.topright = (self.config.WINDOW_WIDTH - 10, 110)  # Augmenté de 90 à 110
             self.screen.blit(always_skip_surface, always_skip_rect)
         
         # Afficher les bonus actifs
@@ -1594,11 +1666,28 @@ class Game:
         self.level = 1
         self.xp = 0
         self.xp_to_next_level = 100
+        
+        # === RÉINITIALISER LE SYSTÈME DE PIÈCES ET PROGRESSION ===
+        self.coins_collected = 0
+        self.coins_to_next_level = 5  # Pièces nécessaires pour le niveau 2
+        self.progression_animation_timer = 0
+        self.progression_bar_progress = 0.0
+        self.target_progression = 0.0
+        
+        # === RÉINITIALISER LES ANIMATIONS DE BARRES ===
+        self.health_bar_progress = 1.0
+        self.target_health_progress = 1.0
+        self.shield_bar_progress = 1.0
+        self.target_shield_progress = 1.0
+        
+        # === RÉINITIALISER LES UPGRADES ===
         self.upgrade_options = []
+        self.banned_upgrades = []
         self.show_upgrade_screen = False
         self.ban_mode = False
         self.roll_count = 3
         self.ban_count = 1
+        self.always_skip_mode = False
         
         # === RÉINITIALISER LES GESTIONNAIRES D'ARMES ET COMPÉTENCES ===
         self.weapon_manager = WeaponManager()  # Recommence avec juste le canon
@@ -1626,26 +1715,26 @@ class Game:
         self.camera_y = self.player.y + self.player.size // 2 - self.config.WINDOW_HEIGHT // 2
         self.camera_delay_timer = 0
         
-        # Vider les listes
+        # === VIDER TOUTES LES LISTES D'OBJETS ===
         self.enemies.clear()
+        self.enemy_projectiles.clear()  # ✅ Vider les projectiles ennemis
         self.zaps.clear()
-        self.lightnings.clear()  # Nouveau
-        self.beams.clear()       # Nouveau
-        self.particles.clear()   # Nouveau
-        self.welding_particles.clear()  # Nouveau
-        self.energy_orbs.clear()  # Nouveau
-        self.death_effects.clear()  # Nouveau - pour les effets de mort
-        self.orb_death_effects.clear()  # Nouveau - pour les effets de mort par orbe
-        self.beam_death_effects.clear()  # Nouveau - pour les effets de mort par beam
+        self.lightnings.clear()
+        self.beams.clear()
+        self.particles.clear()
+        self.welding_particles.clear()
+        self.energy_orbs.clear()
+        self.death_effects.clear()
+        self.orb_death_effects.clear()
+        self.beam_death_effects.clear()
+        self.collectibles.clear()  # ✅ IMPORTANT: Vider les drops (pièces, cœurs, etc.)
         
-        # Les orb sont maintenant gérées automatiquement par le WeaponManager
-        # Plus besoin d'appel manuel
-        
-        # Réinitialiser le gestionnaire de bonus
+        # === RÉINITIALISER LE GESTIONNAIRE DE BONUS ===
         self.bonus_manager = BonusManager(self.config)
         
         print("🔄 RESTART: Jeu complètement réinitialisé !")
-        print(f"   📊 Niveau: {self.level}, XP: {self.xp}/{self.xp_to_next_level}")
+        print(f"   📊 Niveau: {self.level}, Pièces: {self.coins_collected}/{self.coins_to_next_level}")
+        print(f"   🎯 Score: {self.score}, Ennemis tués: {self.enemies_killed}")
         print(f"   ⚔️ Armes: {len(self.weapon_manager.weapons)}/7")
         print(f"   🎯 Compétences: {len(self.skill_manager.skills)}/14")
         print(f"   🎲 Bans disponibles: {self.ban_count}")

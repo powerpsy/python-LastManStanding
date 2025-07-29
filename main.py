@@ -32,7 +32,8 @@ def main():
     test_survival_timer = False  # Mettre True pour tester le timer de survie
     test_lightning_effects = False  # Mettre True pour tester les effets de lightning
     test_beam_effects = False  # Mettre True pour tester les effets de beam
-    test_shield_effects = False  # Mettre True pour tester les boucliers
+    test_shield_effects = False  # Mettre True pour tester les boucliers temporaires
+    test_shield_skill = False  # Mettre True pour tester la compétence Bouclier
     test_force_shooters = False  # Mettre True pour forcer des ennemis tireurs
     
     try:
@@ -77,6 +78,16 @@ def main():
             print("🧪 MODE TEST SHIELD EFFECTS ACTIVÉ")
             game.bonus_manager.apply_bonus("shield", game)
             print("Bouclier activé pour tester les projectiles ennemis !")
+        
+        # Si mode test shield skill activé, débloquer automatiquement la compétence Bouclier
+        if test_shield_skill:
+            print("🧪 MODE TEST SHIELD SKILL ACTIVÉ")
+            from weapons import ShieldSkill
+            shield_skill = ShieldSkill()
+            shield_skill.level = 1
+            shield_skill.is_active = True
+            game.skill_manager.skills.append(shield_skill)
+            print("Compétence Bouclier niveau 1 débloquée pour tester la barre de bouclier !")
         
         # Si mode test force shooters activé, forcer des ennemis tireurs
         if test_force_shooters:
