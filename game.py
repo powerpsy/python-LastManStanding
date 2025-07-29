@@ -120,7 +120,7 @@ class Game:
         # Système de progression basé sur les pièces
         self.level = 1
         self.coins_collected = 0  # Nombre total de pièces collectées
-        self.coins_to_next_level = 5  # Pièces nécessaires pour le prochain niveau (plus rapide)
+        self.coins_to_next_level = 5  # Sera corrigé après l'initialisation
         self.progression_animation_timer = 0  # Timer pour l'animation de la barre
         self.progression_bar_progress = 0.0  # Progression actuelle de la barre (0.0 à 1.0)
         self.target_progression = 0.0  # Progression cible pour l'animation
@@ -146,6 +146,9 @@ class Game:
         self.game_end_time = None  # Temps de fin (survie) en millisecondes
         self.enemies_killed = 0  # Nombre d'ennemis tués
         self.max_level_reached = 1  # Niveau maximum atteint
+        
+        # Corriger la valeur de coins_to_next_level - pour le niveau 2, il faut 5 pièces au total
+        self.coins_to_next_level = 5  # Pièces nécessaires pour atteindre le niveau 2
     
     def trigger_game_over(self):
         """Déclenche la fin de partie et enregistre le temps de survie"""
@@ -300,23 +303,10 @@ class Game:
             self.level += 1
             self.max_level_reached = max(self.max_level_reached, self.level)
             
-            # Calcul des pièces pour le prochain niveau (progression plus rapide)
-            # Formule ajustée : base plus petite + progression linéaire + petit bonus exponentiel
-            if self.level <= 5:
-                # Premiers niveaux très rapides (5, 8, 12, 16, 22 pièces)
-                self.coins_to_next_level = int(5 + (self.level - 1) * 3 + (self.level - 1) * 0.5)
-            elif self.level <= 15:
-                # Niveaux intermédiaires (progression modérée)
-                base = 22  # Dernier niveau de la phase 1
-                additional = (self.level - 5) * 4  # +4 pièces par niveau
-                self.coins_to_next_level = int(base + additional)
-            else:
-                # Niveaux élevés (progression plus lente mais gérable)
-                base = 62  # Niveau 15 = 22 + 10*4 = 62
-                additional = (self.level - 15) * 6  # +6 pièces par niveau
-                self.coins_to_next_level = int(base + additional)
+            # Calculer les pièces nécessaires pour le prochain niveau en utilisant la méthode centralisée
+            self.coins_to_next_level = self.calculate_coins_for_level(self.level + 1)
             
-            print(f"🎉 NIVEAU {self.level} ! Prochains niveau: {self.coins_to_next_level} pièces")
+            print(f"🎉 NIVEAU {self.level} ! Prochain niveau: {self.coins_to_next_level} pièces au total")
             
             # Déclencher l'écran d'upgrade
             if not self.always_skip_mode:
@@ -338,10 +328,11 @@ class Game:
             else:
                 self.target_progression = 1.0
         else:
-            # Pour les niveaux suivants, calculer depuis le dernier seuil
-            previous_level_coins = self.calculate_coins_for_level(self.level - 1)  # CORRIGÉ: niveau précédent
-            coins_needed_this_level = self.coins_to_next_level - previous_level_coins
-            coins_progress_this_level = self.coins_collected - previous_level_coins
+            # Pour les niveaux suivants, calculer la progression vers le niveau suivant (level + 1)
+            next_level_total_needed = self.calculate_coins_for_level(self.level + 1)
+            current_level_total_needed = self.calculate_coins_for_level(self.level)
+            coins_needed_this_level = next_level_total_needed - current_level_total_needed
+            coins_progress_this_level = self.coins_collected - current_level_total_needed
             
             # Vérification pour éviter la division par zéro
             if coins_needed_this_level > 0:
@@ -1442,13 +1433,15 @@ class Game:
         if self.level == 1:
             progress_text = f"{self.coins_collected} / {self.coins_to_next_level} pièces"
         else:
-            previous_level_coins = self.calculate_coins_for_level(self.level - 1)  # CORRIGÉ: niveau précédent
-            coins_needed_this_level = self.coins_to_next_level - previous_level_coins
-            coins_progress_this_level = self.coins_collected - previous_level_coins
+            # Calculer la progression vers le niveau suivant (level + 1)
+            next_level_total_needed = self.calculate_coins_for_level(self.level + 1)
+            current_level_total_needed = self.calculate_coins_for_level(self.level)
+            coins_needed_this_level = next_level_total_needed - current_level_total_needed
+            coins_progress_this_level = self.coins_collected - current_level_total_needed
             
             # Vérification pour éviter les valeurs négatives
             coins_needed_this_level = max(1, coins_needed_this_level)
-            coins_progress_this_level = max(0, coins_progress_this_level)
+            coins_progress_this_level = max(0, min(coins_progress_this_level, coins_needed_this_level))
             
             progress_text = f"{coins_progress_this_level} / {coins_needed_this_level} pièces"
         
@@ -2003,7 +1996,14 @@ class Game:
         """Affiche l'écran de choix d'upgrade à la montée de niveau"""
         self.upgrade_options = self.get_smart_upgrade_options()
         
-        # Démarrer la transition vers l'écran d'upgrade
+        # Vérifier s'il y a des options d'upgrade disponibles
+        if len(self.upgrade_options) == 0:
+            print("🎯 Aucune amélioration disponible - Activation automatique du mode Always Skip")
+            self.always_skip_mode = True
+            self.score += 1000  # Bonus de score pour compensation
+            return  # Ne pas afficher l'écran d'upgrade
+        
+        # Démarrer la transition vers l'écran d'upgrade seulement s'il y a des options
         self.transition_to_upgrade_screen()
     
     def get_upgrade_option_rects(self):
