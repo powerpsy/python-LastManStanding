@@ -117,8 +117,15 @@ class Game:
         self.roll_count = 3
         self.ban_count = 3
         
-        # Système de progression
+        # Système de progression basé sur les pièces
         self.level = 1
+        self.coins_collected = 0  # Nombre total de pièces collectées
+        self.coins_to_next_level = 5  # Pièces nécessaires pour le prochain niveau (plus rapide)
+        self.progression_animation_timer = 0  # Timer pour l'animation de la barre
+        self.progression_bar_progress = 0.0  # Progression actuelle de la barre (0.0 à 1.0)
+        self.target_progression = 0.0  # Progression cible pour l'animation
+        
+        # Anciens champs XP gardés pour compatibilité (mais non utilisés)
         self.xp = 0
         self.xp_to_next_level = 100
         
@@ -261,6 +268,93 @@ class Game:
             on_complete=show_skills
         )
     
+    def calculate_coins_for_level(self, level):
+        """Calcule le nombre total cumulé de pièces nécessaires pour atteindre un niveau donné"""
+        if level <= 1:
+            return 0
+        
+        total = 0
+        for lvl in range(2, level + 1):
+            if lvl <= 5:
+                # Premiers niveaux : 5, 8, 12, 16, 22
+                coins_for_this_level = int(5 + (lvl - 2) * 3 + (lvl - 2) * 0.5)
+            elif lvl <= 15:
+                # Niveaux intermédiaires
+                base = 22  # Coins pour niveau 5
+                additional = (lvl - 5) * 4
+                coins_for_this_level = int(base + additional)
+            else:
+                # Niveaux élevés
+                base = 62  # Coins pour niveau 15
+                additional = (lvl - 15) * 6
+                coins_for_this_level = int(base + additional)
+            
+            total += coins_for_this_level
+        
+        return total
+
+    def check_level_progression(self):
+        """Vérifie si le joueur peut passer au niveau suivant basé sur les pièces collectées"""
+        if self.coins_collected >= self.coins_to_next_level:
+            # Level up !
+            self.level += 1
+            self.max_level_reached = max(self.max_level_reached, self.level)
+            
+            # Calcul des pièces pour le prochain niveau (progression plus rapide)
+            # Formule ajustée : base plus petite + progression linéaire + petit bonus exponentiel
+            if self.level <= 5:
+                # Premiers niveaux très rapides (5, 8, 12, 16, 22 pièces)
+                self.coins_to_next_level = int(5 + (self.level - 1) * 3 + (self.level - 1) * 0.5)
+            elif self.level <= 15:
+                # Niveaux intermédiaires (progression modérée)
+                base = 22  # Dernier niveau de la phase 1
+                additional = (self.level - 5) * 4  # +4 pièces par niveau
+                self.coins_to_next_level = int(base + additional)
+            else:
+                # Niveaux élevés (progression plus lente mais gérable)
+                base = 62  # Niveau 15 = 22 + 10*4 = 62
+                additional = (self.level - 15) * 6  # +6 pièces par niveau
+                self.coins_to_next_level = int(base + additional)
+            
+            print(f"🎉 NIVEAU {self.level} ! Prochains niveau: {self.coins_to_next_level} pièces")
+            
+            # Déclencher l'écran d'upgrade
+            if not self.always_skip_mode:
+                self.trigger_upgrade_screen()
+            else:
+                print("🚀 Always Skip activé - Level up automatique")
+                self.score += 1000  # Bonus de score
+        
+        # Mettre à jour la progression pour l'animation de la barre
+        self.update_progression_animation()
+    
+    def update_progression_animation(self):
+        """Met à jour l'animation de la barre de progression"""
+        # Calculer la progression cible (0.0 à 1.0)
+        if self.level == 1:
+            # Pour le premier niveau, utiliser les pièces collectées directement
+            if self.coins_to_next_level > 0:
+                self.target_progression = min(1.0, self.coins_collected / self.coins_to_next_level)
+            else:
+                self.target_progression = 1.0
+        else:
+            # Pour les niveaux suivants, calculer depuis le dernier seuil
+            previous_level_coins = self.calculate_coins_for_level(self.level - 1)  # CORRIGÉ: niveau précédent
+            coins_needed_this_level = self.coins_to_next_level - previous_level_coins
+            coins_progress_this_level = self.coins_collected - previous_level_coins
+            
+            # Vérification pour éviter la division par zéro
+            if coins_needed_this_level > 0:
+                self.target_progression = min(1.0, max(0.0, coins_progress_this_level / coins_needed_this_level))
+            else:
+                self.target_progression = 1.0
+        
+        # Animation fluide vers la progression cible
+        if abs(self.progression_bar_progress - self.target_progression) > 0.001:
+            self.progression_bar_progress += (self.target_progression - self.progression_bar_progress) * 0.1
+        else:
+            self.progression_bar_progress = self.target_progression
+
     def transition_from_skills_screen(self):
         """Démarre une transition de retour au jeu depuis l'écran des compétences"""
         # Sauvegarder l'état actuel pour la transition
@@ -509,14 +603,8 @@ class Game:
             self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE
             self.enemies_spawned = 0
             
-            # Déclencher l'écran d'upgrade seulement à partir de la vague 3
-            # MAIS pas si le mode "Always Skip" est activé
-            if self.wave_number >= 3 and not self.always_skip_mode:
-                self.trigger_upgrade_screen()
-            elif self.wave_number >= 3 and self.always_skip_mode:
-                # Mode Always Skip activé - donner un bonus de score directement
-                print("🚀 Always Skip activé - Level up automatique avec bonus XP")
-                self.score += 1000  # Bonus de score
+            # La progression des niveaux est maintenant basée sur les pièces collectées
+            # L'ancien système basé sur les vagues a été remplacé
             
             # Réduction du délai entre les ennemis (plus difficile)
             reduction_factor = self.config.ENEMY_SPAWN_DELAY_REDUCTION ** (self.wave_number - 1)
@@ -628,6 +716,10 @@ class Game:
         
         # Mettre à jour les collectibles
         self.update_collectibles()
+        
+        # Mettre à jour l'animation de progression (si nécessaire)
+        if hasattr(self, 'progression_animation_timer'):
+            self.update_progression_animation()
         
         # Nettoyer toutes les entités (optimisé)
         self.cleanup_entities()
@@ -745,41 +837,11 @@ class Game:
         pass
     
     def auto_fire(self):
-        """Tire automatiquement vers l'ennemi le plus proche"""
-        if not self.enemies:
-            return
-        
-        # Portée maximale du canon : 10 tiles (320 pixels) - un peu plus que les lightning
-        zap_range = 320
-        player_center_x = self.player.x + self.player.size // 2
-        player_center_y = self.player.y + self.player.size // 2
-        
-        # Filtrer les ennemis dans la portée
-        enemies_in_range = [e for e in self.enemies 
-                           if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= zap_range]
-        
-        if not enemies_in_range:
-            return  # Aucun ennemi dans la portée
-        
-        # Trouver l'ennemi le plus proche parmi ceux dans la portée
-        closest_enemy = min(enemies_in_range, key=lambda e: 
-            math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
-        
-        # Créer un projectile de canon
-        enemy_center_x = closest_enemy.x + closest_enemy.size // 2
-        enemy_center_y = closest_enemy.y + closest_enemy.size // 2
-        
-        # Calculer la direction normalisée
-        direction_x = enemy_center_x - player_center_x
-        direction_y = enemy_center_y - player_center_y
-        direction_length = math.sqrt(direction_x**2 + direction_y**2)
-        
-        if direction_length > 0:
-            direction_x /= direction_length
-            direction_y /= direction_length
-        
-        zap = Zap(player_center_x, player_center_y, direction_x, direction_y, self.config)
-        self.zaps.append(zap)
+        """Tire automatiquement vers l'ennemi le plus proche - OBSOLÈTE"""
+        # Cette méthode est maintenant obsolète.
+        # Le tir automatique est géré par le système OOP via CannonWeapon.fire()
+        # qui utilise automatiquement la portée dynamique selon le niveau.
+        pass
     
     def auto_lightning(self):
         """Tire automatiquement des lightning vers plusieurs ennemis"""
@@ -1300,7 +1362,9 @@ class Game:
         time_rect = time_surface.get_rect()
         time_rect.topright = (self.config.WINDOW_WIDTH - 10, 50)
         self.screen.blit(time_surface, time_rect)
-        self.screen.blit(time_surface, time_rect)
+        
+        # Barre de progression basée sur les pièces collectées
+        self.draw_progression_bar()
         
         # Indicateur "Always Skip" si activé
         if self.always_skip_mode:
@@ -1325,6 +1389,74 @@ class Game:
             shield_surface = self.small_font.render(shield_text, True, self.config.CYAN)
             self.screen.blit(shield_surface, (30, y_offset))
     
+    def draw_progression_bar(self):
+        """Dessine la barre de progression des niveaux basée sur les pièces collectées"""
+        # Mettre à jour l'animation
+        self.update_progression_animation()
+        
+        # Calculer l'espace occupé par la minimap
+        minimap_size = min(self.config.WINDOW_WIDTH // self.config.MINIMAP_SIZE_RATIO, 
+                          self.config.WINDOW_HEIGHT // self.config.MINIMAP_SIZE_RATIO)
+        minimap_space = minimap_size + self.config.MINIMAP_MARGIN + 20  # +20 pour marge supplémentaire
+        
+        # Dimensions et position de la barre
+        margin_left = 50  # Marge à gauche réduite
+        margin_right = minimap_space  # Marge à droite basée sur la minimap
+        bar_width = self.config.WINDOW_WIDTH - margin_left - margin_right
+        bar_height = 25  # Hauteur de la barre
+        bar_x = margin_left
+        bar_y = self.config.WINDOW_HEIGHT - 60  # 60 pixels du bas de l'écran
+        
+        # Fond de la barre (gris foncé) avec bords arrondis
+        background_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+        pygame.draw.rect(self.screen, (40, 40, 40), background_rect, border_radius=12)
+        
+        # Bordure de la barre avec bords arrondis
+        pygame.draw.rect(self.screen, (200, 200, 200), background_rect, 2, border_radius=12)
+        
+        # Barre de progression avec bords arrondis (couleur dorée unie)
+        if self.progression_bar_progress > 0:
+            progress_width = int(bar_width * self.progression_bar_progress)
+            # Réduire la largeur pour laisser voir le cadre blanc (marge de 3 pixels de chaque côté)
+            progress_rect = pygame.Rect(bar_x + 3, bar_y + 3, max(0, progress_width - 6), max(0, bar_height - 6))
+            
+            if progress_rect.width > 0 and progress_rect.height > 0:
+                # Couleur dorée de base
+                gold_color = (255, 215, 0)
+                pygame.draw.rect(self.screen, gold_color, progress_rect, border_radius=9)
+        
+        # Effet de brillance avec bords arrondis (barre plus claire au centre)
+        if self.progression_bar_progress > 0:
+            progress_width = int(bar_width * self.progression_bar_progress)
+            # Ajuster pour la nouvelle taille réduite de la barre
+            shine_rect = pygame.Rect(bar_x + 5, bar_y + bar_height // 3 + 1, max(0, progress_width - 10), max(0, bar_height // 3 - 2))
+            if shine_rect.width > 0 and shine_rect.height > 0:
+                shine_surface = pygame.Surface((shine_rect.width, shine_rect.height), pygame.SRCALPHA)
+                shine_surface.set_alpha(80)  # Réduit l'opacité pour un effet plus subtil
+                shine_surface.fill((255, 245, 100))
+                # Créer un masque arrondi pour l'effet de brillance
+                pygame.draw.rect(shine_surface, (255, 245, 100, 80), (0, 0, shine_rect.width, shine_rect.height), border_radius=7)
+                self.screen.blit(shine_surface, (shine_rect.x, shine_rect.y))
+        
+        # Texte de progression (au centre de la barre)
+        if self.level == 1:
+            progress_text = f"{self.coins_collected} / {self.coins_to_next_level} pièces"
+        else:
+            previous_level_coins = self.calculate_coins_for_level(self.level - 1)  # CORRIGÉ: niveau précédent
+            coins_needed_this_level = self.coins_to_next_level - previous_level_coins
+            coins_progress_this_level = self.coins_collected - previous_level_coins
+            
+            # Vérification pour éviter les valeurs négatives
+            coins_needed_this_level = max(1, coins_needed_this_level)
+            coins_progress_this_level = max(0, coins_progress_this_level)
+            
+            progress_text = f"{coins_progress_this_level} / {coins_needed_this_level} pièces"
+        
+        progress_surface = self.small_font.render(progress_text, True, (255, 255, 255))
+        progress_rect = progress_surface.get_rect()
+        progress_rect.center = (bar_x + bar_width // 2, bar_y + bar_height // 2)
+        self.screen.blit(progress_surface, progress_rect)
+
     def draw_pause_screen(self):
         """Dessine l'écran de pause"""
         # Overlay semi-transparent

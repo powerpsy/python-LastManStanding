@@ -1623,11 +1623,15 @@ class Coin(Collectible):
             pygame.draw.circle(screen, (255, 215, 0), (screen_x, screen_y), self.size // 6)
     
     def on_collect(self, player, game=None):
-        """Donne des points/monnaie au joueur"""
+        """Donne des points/monnaie au joueur et met à jour la progression"""
         # Utiliser la valeur de la config
         if game:
             game.score += self.config.COIN_VALUE
+            game.coins_collected += 1  # Incrémenter les pièces collectées
             print(f"🪙 Pièce collectée ! +{self.config.COIN_VALUE} points (Score total: {game.score})")
+            
+            # Vérifier la progression du niveau
+            game.check_level_progression()
         else:
             print(f"🪙 Pièce collectée ! +{self.config.COIN_VALUE} points")
 

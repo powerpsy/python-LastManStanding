@@ -20,7 +20,7 @@ class WeaponConfig:
         # Progressions par niveau (multiplicateurs)
         "damage_progression": [1.0, 1.2, 1.44, 1.73, 2.07, 2.49, 2.99, 3.58, 4.30, 5.16],
         "fire_rate_progression": [1.0, 0.9, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39],  # Plus bas = plus rapide
-        "range_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]
+        "range_progression": [1.0, 1.15, 1.35, 1.55, 1.8, 2.1, 2.4, 2.75, 3.1, 3.5]
     }
     
     # === LIGHTNING ===
