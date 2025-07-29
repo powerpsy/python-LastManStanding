@@ -1,4 +1,11 @@
-# Last Man Standing - Jeu d'Action Temps Réel
+# Last Man Standing
+
+Hey ! if you read this, leave me a comment or a small mail & contact me on discord project page.
+https://discord.gg/yYAEDgwX
+
+I'd like to get your ideas and I'm open to add your contributions !
+Cheers,
+Sam
 
 ## Architecture du Code
 
