@@ -187,7 +187,12 @@ class LightningWeapon(Weapon):
         self.fire_timer += 1
     
     def get_fire_rate(self, config):
-        return int(get_weapon_stat("Lightning", "fire_rate", self.level))
+        # Utiliser la configuration de l'instance (modifiée pour le joueur type 3)
+        base_rate = self.config.get("base_fire_rate", 120)
+        progression = self.config.get("fire_rate_progression", [1.0])
+        index = min(self.level - 1, len(progression) - 1)
+        multiplier = progression[index] if index >= 0 else 1.0
+        return int(base_rate * multiplier)
     
     def get_damage(self):
         return get_weapon_stat("Lightning", "damage", self.level)
@@ -447,18 +452,34 @@ class MagnetSkill(Skill):
 class WeaponManager:
     """Gestionnaire des armes du joueur"""
     
-    def __init__(self):
+    def __init__(self, config=None):
         self.weapons = []
         self.max_weapons = 7
         
-        # Commencer avec le canon
-        cannon = CannonWeapon()
-        self.weapons.append(cannon)
+        # Utiliser le système de profils pour déterminer l'arme de départ
+        sprite_type = getattr(config, 'PLAYER_SPRITE_TYPE', 1) if config else 1
+        
+        # Importer ici pour éviter les imports circulaires
+        from player_profiles import PlayerProfileManager
+        
+        # Obtenir le profil du joueur et son arme de départ
+        profile = PlayerProfileManager.get_profile(sprite_type)
+        starting_weapon = profile.get_starting_weapon()
+        
+        self.weapons.append(starting_weapon)
+        
+        # Stocker le profil pour référence future
+        self.player_profile = profile
     
     def add_weapon(self, weapon_class):
         """Ajoute une nouvelle arme si possible"""
         if len(self.weapons) < self.max_weapons:
             weapon = weapon_class()
+            
+            # Appliquer les modifications du profil à la nouvelle arme
+            if hasattr(self, 'player_profile'):
+                self.player_profile.apply_weapon_modifications(weapon)
+            
             self.weapons.append(weapon)
             return True
         return False

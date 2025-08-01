@@ -28,7 +28,7 @@ class WeaponConfig:
         "name": "Lightning",
         "max_level": 10,
         "base_damage": 150,  # Triplé de 50 à 150
-        "base_fire_rate": 120,  # frames entre les tirs (2 secondes)
+        "base_fire_rate": 120,  # frames entre les tirs (2 secondes) - valeur par défaut
         "base_range": 500,
         "chain_range": 256,
         "base_chain_count": 1,

@@ -66,6 +66,11 @@ class Game:
             config.WINDOW_HEIGHT // 2,
             config
         )
+        
+        # Appliquer le profil du joueur
+        from player_profiles import PlayerProfileManager
+        self.player_profile = PlayerProfileManager.get_profile(getattr(config, 'PLAYER_SPRITE_TYPE', 1))
+        self.player_profile.apply_player_stats(self.player, config)
         self.enemies = []
         self.zaps = []
         self.enemy_projectiles = []  # Nouvelle liste pour les projectiles d'ennemis
@@ -96,7 +101,7 @@ class Game:
         self.lightning_timer = 0  # Nouveau timer pour les lightning
         
         # Nouveau système d'armes et compétences orienté objet
-        self.weapon_manager = WeaponManager()  # Commence avec le canon
+        self.weapon_manager = WeaponManager(config)  # Arme de départ selon le type de sprite
         self.skill_manager = SkillManager()    # Commence sans compétences
         
         # Système de caméra avec délai
@@ -1719,7 +1724,7 @@ class Game:
         self.always_skip_mode = False
         
         # === RÉINITIALISER LES GESTIONNAIRES D'ARMES ET COMPÉTENCES ===
-        self.weapon_manager = WeaponManager()  # Recommence avec juste le canon
+        self.weapon_manager = WeaponManager(self.config)  # Arme de départ selon le type de sprite
         self.skill_manager = SkillManager()    # Recommence sans compétences
         
         # === RÉINITIALISER LES STATISTIQUES ===
@@ -1738,6 +1743,11 @@ class Game:
             world_bounds['max_y'] // 2,
             self.config
         )
+        
+        # Réappliquer le profil du joueur
+        from player_profiles import PlayerProfileManager
+        self.player_profile = PlayerProfileManager.get_profile(getattr(self.config, 'PLAYER_SPRITE_TYPE', 1))
+        self.player_profile.apply_player_stats(self.player, self.config)
         
         # Réinitialiser la caméra
         self.camera_x = self.player.x + self.player.size // 2 - self.config.WINDOW_WIDTH // 2
