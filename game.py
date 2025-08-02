@@ -2,7 +2,7 @@ import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
-from entities import Player, Enemy, Zap, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, Coin, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
+from entities import Player, Enemy, CanonProjectile, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, Coin, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
 from background import Background
 from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill, MagnetSkill, ShieldSkill
 from transitions import TransitionManager, TRANSITION_TYPES
@@ -72,7 +72,7 @@ class Game:
         self.player_profile = PlayerProfileManager.get_profile(getattr(config, 'PLAYER_SPRITE_TYPE', 1))
         self.player_profile.apply_player_stats(self.player, config)
         self.enemies = []
-        self.zaps = []
+        self.canon_projectiles = []
         self.enemy_projectiles = []  # Nouvelle liste pour les projectiles d'ennemis
         self.lightnings = []  # Nouvelle liste pour les éclairs
         self.beams = []       # Nouvelle liste pour les rayons laser
@@ -735,7 +735,7 @@ class Game:
         for weapon in self.weapon_manager.weapons:
             if weapon.is_active:
                 if weapon.name == "Canon":  # CORRIGÉ: "Canon" au lieu de "Cannon"
-                    weapon.fire(self.player, self.enemies, self.zaps, self.config)
+                    weapon.fire(self.player, self.enemies, self.canon_projectiles, self.config)
                 elif weapon.name == "Lightning":
                     hit_positions = weapon.fire(self.player, self.enemies, self.lightnings, self.config)
                     # Créer des effets d'explosion renforcés pour chaque ennemi touché par Lightning
@@ -1757,7 +1757,7 @@ class Game:
         # === VIDER TOUTES LES LISTES D'OBJETS ===
         self.enemies.clear()
         self.enemy_projectiles.clear()  # ✅ Vider les projectiles ennemis
-        self.zaps.clear()
+        self.canon_projectiles.clear()
         self.lightnings.clear()
         self.beams.clear()
         self.particles.clear()
@@ -2389,8 +2389,8 @@ class Game:
             self.draw_entity_with_camera_offset(enemy, camera_x, camera_y)
         
         # Dessiner les projectiles de canon
-        for zap in self.zaps:
-            self.draw_entity_with_camera_offset(zap, camera_x, camera_y)
+        for canon_projectile in self.canon_projectiles:
+            self.draw_entity_with_camera_offset(canon_projectile, camera_x, camera_y)
         
         # Dessiner les projectiles ennemis
         for projectile in self.enemy_projectiles:
@@ -2446,23 +2446,23 @@ class Game:
             'bottom': self.camera_y + self.config.WINDOW_HEIGHT + margin
         }
         
-        # Mettre à jour et gérer les collisions des zaps
-        zaps_to_remove = []
-        for zap in self.zaps:
-            zap.update()
+        # Mettre à jour et gérer les collisions des projectiles de canon
+        canon_projectiles_to_remove = []
+        for canon_projectile in self.canon_projectiles:
+            canon_projectile.update()
             
             # Vérifier si hors limites
-            if not (camera_bounds['left'] <= zap.x <= camera_bounds['right'] and 
-                    camera_bounds['top'] <= zap.y <= camera_bounds['bottom']):
-                zaps_to_remove.append(zap)
+            if not (camera_bounds['left'] <= canon_projectile.x <= camera_bounds['right'] and 
+                    camera_bounds['top'] <= canon_projectile.y <= camera_bounds['bottom']):
+                canon_projectiles_to_remove.append(canon_projectile)
                 continue
             
             # Collision avec les ennemis
             for enemy in self.enemies[:]:
-                if self.check_collision(zap, enemy):
-                    damage = int(self.config.ZAP_DAMAGE * self.bonus_manager.get_damage_multiplier())
+                if self.check_collision(canon_projectile, enemy):
+                    damage = int(canon_projectile.damage * self.bonus_manager.get_damage_multiplier())
                     enemy.take_damage(damage)
-                    zaps_to_remove.append(zap)
+                    canon_projectiles_to_remove.append(canon_projectile)
                     
                     if enemy.health <= 0:
                         # Créer effet de mort pour les ennemis spéciaux
@@ -2483,10 +2483,10 @@ class Game:
                         self.score += self.config.SCORE_PER_ENEMY_KILL
                     break
         
-        # Supprimer les zaps marqués pour suppression
-        for zap in zaps_to_remove:
-            if zap in self.zaps:
-                self.zaps.remove(zap)
+        # Supprimer les projectiles de canon marqués pour suppression
+        for canon_projectile in canon_projectiles_to_remove:
+            if canon_projectile in self.canon_projectiles:
+                self.canon_projectiles.remove(canon_projectile)
         
         # Mettre à jour et gérer les collisions des projectiles ennemis
         projectiles_to_remove = []

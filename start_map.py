@@ -66,32 +66,44 @@ class PlayerSelector:
         # Mettre à jour les animations de tous les joueurs
         for player_id, player_entity in self.player_entities.items():
             if hasattr(player_entity, 'update'):
-                # Créer un dictionnaire vide pour simuler les touches non pressées
-                empty_keys = {}
+                # Créer un objet simulant les touches pressées pour forcer l'animation
+                class FakeKeys:
+                    def __getitem__(self, key):
+                        # Simuler une touche pressée pour déclencher l'animation
+                        import pygame
+                        if key == pygame.K_DOWN:  # Toujours "presser" la touche BAS
+                            return True
+                        return False
                 
-                # Forcer l'animation même sans mouvement en mettant à jour juste l'animation
-                if hasattr(player_entity, 'update_animation'):
-                    player_entity.update_animation(dt)
+                fake_keys = FakeKeys()
                 
-                # Mettre à jour la position/logique sans mouvement
+                # Forcer l'animation en simulant un mouvement
                 old_x, old_y = player_entity.x, player_entity.y
                 player_entity.vel_x = 0
-                player_entity.vel_y = 0
+                player_entity.vel_y = 0.1  # Très léger mouvement pour déclencher l'animation
+                
+                # Mettre à jour avec les fausses touches (Player.update prend seulement keys)
+                player_entity.update(fake_keys)
+                
+                # Restaurer la position exacte (pas de mouvement réel)
+                player_entity.x, player_entity.y = old_x, old_y
     
     def draw(self, screen, zone_x, zone_y, zone_width, zone_height):
         """Dessine la sélection de joueur dans la zone spécifiée"""
-        # Dessiner le titre "Sélectionner le joueur" en haut de la zone
+        # Dessiner le titre "SELECTION DU JOUEUR" en haut de la zone
         title_font = pygame.font.Font(None, 28)
-        title_text = title_font.render("Sélectionner le joueur", True, (255, 255, 255))
+        title_text = title_font.render("SELECTION DU JOUEUR", True, (255, 255, 255))
         title_rect = title_text.get_rect(center=(zone_x + zone_width // 2, zone_y + 25))
         screen.blit(title_text, title_rect)
         
-        # Calculer la disposition des sprites avec encore plus d'espacement
+        # Calculer la disposition des sprites avec ajustement pour le titre
         sprite_size = 64
-        spacing = 150  # Augmenté de 100 à 120px d'espacement
-        total_width_needed = 3 * sprite_size + 2 * spacing  # 3 sprites + 2 espaces de 120px
+        spacing = 120  # Espacement entre sprites
+        total_width_needed = 3 * sprite_size + 2 * spacing  # 3 sprites + 2 espaces
         start_x = zone_x + (zone_width - total_width_needed) // 2
-        sprite_y = zone_y + 80  # Plus d'espace en haut pour le titre
+        # Positionner les sprites en tenant compte du titre (centrage dans l'espace restant)
+        remaining_height = zone_height - 50  # 50px pour le titre
+        sprite_y = zone_y + 50 + (remaining_height - sprite_size) // 2
         
         for player_id in range(1, 4):
             # Calculer la position X de chaque sprite avec espacement fixe
@@ -138,7 +150,9 @@ class PlayerSelector:
         spacing = 120  # Même espacement que dans draw
         total_width_needed = 3 * sprite_size + 2 * spacing
         start_x = zone_x + (zone_width - total_width_needed) // 2
-        sprite_y = zone_y + 80  # Même position Y que dans draw
+        # Même position Y que dans draw (avec ajustement pour le titre)
+        remaining_height = zone_height - 50  # 50px pour le titre
+        sprite_y = zone_y + 50 + (remaining_height - sprite_size) // 2
         
         for player_id in range(1, 4):
             sprite_x = start_x + (player_id - 1) * (sprite_size + spacing)
@@ -156,7 +170,9 @@ class PlayerSelector:
         spacing = 120  # Même espacement que dans draw
         total_width_needed = 3 * sprite_size + 2 * spacing
         start_x = zone_x + (zone_width - total_width_needed) // 2
-        sprite_y = zone_y + 80  # Même position Y que dans draw
+        # Même position Y que dans draw (avec ajustement pour le titre)
+        remaining_height = zone_height - 50  # 50px pour le titre
+        sprite_y = zone_y + 50 + (remaining_height - sprite_size) // 2
         
         positions = {}
         for player_id in range(1, 4):
@@ -300,7 +316,7 @@ class StartMap:
         player_y = center_y + pentagon_radius * math.sin(angle2) - zone_height // 2
         player_select_zone = StartMapZone(
             player_x, player_y, zone_width * 2.5, zone_height * 2.5,  # Encore plus grand
-            "SÉLECTION JOUEUR",
+            "",
             "Choisissez votre personnage",
             "player_select",
             color=(200, 180, 100)

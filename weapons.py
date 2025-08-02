@@ -9,7 +9,7 @@ Utilise weapon_config.py pour tous les paramètres et progressions.
 import math
 import pygame
 from abc import ABC, abstractmethod
-from entities import Zap, Lightning, EnergyOrb, Beam
+from entities import CanonProjectile, Lightning, EnergyOrb, Beam
 from weapon_config import WeaponConfig, SkillConfig, get_weapon_stat, get_skill_stat
 
 
@@ -97,9 +97,9 @@ class CannonWeapon(Weapon):
             direction_y /= direction_length
         
         # Créer le projectile avec les dégâts du niveau actuel
-        zap = Zap(player_center_x, player_center_y, direction_x, direction_y, config)
-        zap.damage = get_weapon_stat("Canon", "damage", self.level)
-        projectiles.append(zap)
+        canon_projectile = CanonProjectile(player_center_x, player_center_y, direction_x, direction_y, config)
+        canon_projectile.damage = get_weapon_stat("Canon", "damage", self.level)
+        projectiles.append(canon_projectile)
         
         self.fire_timer = 0
         return None  # Pas d'effets spéciaux pour le canon

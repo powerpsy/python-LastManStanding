@@ -114,8 +114,6 @@ class Config:
         self.ENEMY_SPEED = 0.75
         
         # Projectiles
-        self.ZAP_SIZE = 6
-        self.ZAP_SPEED = 12.0
         self.LIGHTNING_SIZE = 40
         
         # Particules
@@ -163,8 +161,6 @@ class Config:
         self.ENEMY_SPEED = 2.0
         
         # Projectiles
-        self.ZAP_SIZE = 4
-        self.ZAP_SPEED = 10.0
         self.LIGHTNING_SIZE = 32
         
         # Particules
@@ -212,8 +208,6 @@ class Config:
         self.ENEMY_SPEED = 0.5
         
         # Projectiles
-        self.ZAP_SIZE = 3
-        self.ZAP_SPEED = 8.0
         self.LIGHTNING_SIZE = 20
         
         # Particules
@@ -264,7 +258,6 @@ class Config:
         self.SCORE_WAVE_BONUS_MULTIPLIER = 100
         
         # Dégâts des armes (fixes, équilibrés)
-        self.ZAP_DAMAGE = 25
         self.LIGHTNING_DAMAGE = 50
         self.ENERGY_ORB_DAMAGE = 40
         
@@ -339,12 +332,6 @@ class Config:
         self.BONUS_TIME_SLOW_FACTOR = 0.5              # Facteur de ralentissement
         self.BONUS_FREEZE_DURATION = 180               # 3 secondes à 60fps
         
-        # Paramètres du canon (adaptatifs) - Valeurs de base seulement
-        self.ZAP_SPEED = self.WINDOW_WIDTH * 0.005  # 1% de la largeur par frame
-        self.ZAP_SIZE = 3  # Taille du point lumineux
-        self.ZAP_DAMAGE = 25  # Compatibilité avec l'ancien code
-        self.ZAP_FIRE_RATE = 60  # Compatibilité avec l'ancien code
-        
         # Paramètres des lightning (nouveau) - Valeurs de base seulement
         self.LIGHTNING_RANGE = self.WINDOW_WIDTH * 0.3  # 30% de la largeur
         self.LIGHTNING_DISPLAY_TIME = 6  # 0.1 seconde à 60fps
@@ -409,11 +396,11 @@ class Config:
             {"id": "shield", "name": "Bouclier temporaire", "description": "Protection contre les dégâts"},
             {"id": "magnet", "name": "Aimant", "description": "Attire les objets à distance"},
             
-            # Améliorations du canon (Zaps)
-            {"id": "zap_damage", "name": "Canon +30%", "description": "Le canon fait plus de dégâts"},
-            {"id": "zap_fire_rate", "name": "Cadence canon +40%", "description": "Tire plus rapidement"},
-            {"id": "zap_range", "name": "Portée canon +50%", "description": "Portée du canon augmentée"},
-            {"id": "zap_pierce", "name": "Canon perforant", "description": "Le canon traverse les ennemis"},
+            # Améliorations du canon
+            {"id": "canon_damage", "name": "Canon +30%", "description": "Le canon fait plus de dégâts"},
+            {"id": "canon_fire_rate", "name": "Cadence canon +40%", "description": "Tire plus rapidement"},
+            {"id": "canon_range", "name": "Portée canon +50%", "description": "Portée du canon augmentée"},
+            {"id": "canon_pierce", "name": "Canon perforant", "description": "Le canon traverse les ennemis"},
             
             # Améliorations des lightning
             {"id": "lightning_damage", "name": "Lightning +40%", "description": "Les lightning font plus de dégâts"},

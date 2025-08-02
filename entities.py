@@ -576,32 +576,33 @@ class Enemy:
                            (int(self.x), int(self.y - 8), current_width, bar_height))
 
 
-class Zap:
-    """Classe des projectiles électriques"""
+class CanonProjectile:
+    """Classe des projectiles du canon"""
     
     def __init__(self, x, y, dx, dy, config):
         self.x = x
         self.y = y
         self.config = config
-        self.size = config.ZAP_SIZE
-        self.speed = config.ZAP_SPEED
+        self.size = 6  # Taille du projectile
+        self.speed = 8.0  # Vitesse du projectile
+        self.damage = 25  # Dégâts de base (sera surchargé par l'arme)
         
         # Direction normalisée
         self.dx = dx
         self.dy = dy
     
     def update(self):
-        """Met à jour la position du zap"""
+        """Met à jour la position du projectile"""
         self.x += self.dx * self.speed
         self.y += self.dy * self.speed
     
     def draw(self, screen):
-        """Dessine le zap comme un éclair"""
-        # Ligne principale (éclair)
+        """Dessine le projectile du canon"""
+        # Ligne principale (trait d'énergie)
         end_x = self.x + self.dx * 20
         end_y = self.y + self.dy * 20
         
-        pygame.draw.line(screen, self.config.ZAP_COLOR,
+        pygame.draw.line(screen, self.config.YELLOW,
                         (int(self.x), int(self.y)),
                         (int(end_x), int(end_y)), 2)
         
