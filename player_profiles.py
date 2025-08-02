@@ -14,9 +14,10 @@ from weapons import SpeedSkill, RegenSkill, ShieldSkill, MagnetSkill
 class PlayerProfile:
     """Classe de base pour un profil de joueur"""
     
-    def __init__(self, name, description):
+    def __init__(self, name, description, profile_id=1):
         self.name = name
         self.description = description
+        self.profile_id = profile_id  # ID numérique du profil
         
         # Arme de départ
         self.starting_weapon_class = CannonWeapon
@@ -71,7 +72,7 @@ class WarriorProfile(PlayerProfile):
     """Profil Guerrier - Type 1 (player2.png) - Défensif avec orbes"""
     
     def __init__(self):
-        super().__init__("Guerrier", "Spécialiste défensif avec orbes protectrices")
+        super().__init__("Guerrier", "Spécialiste défensif avec orbes protectrices", profile_id=1)
         
         # Arme de départ : Orb
         self.starting_weapon_class = OrbWeapon
@@ -91,7 +92,7 @@ class MageProfile(PlayerProfile):
     """Profil Mage - Type 2 (player3.png) - Équilibré avec canon"""
     
     def __init__(self):
-        super().__init__("Mage", "Combattant équilibré avec armes projectiles")
+        super().__init__("Mage", "Combattant équilibré avec armes projectiles", profile_id=2)
         
         # Arme de départ : Canon
         self.starting_weapon_class = CannonWeapon
@@ -116,7 +117,7 @@ class AssassinProfile(PlayerProfile):
     """Profil Assassin - Type 3 (player4.png) - Rapide avec lightning"""
     
     def __init__(self):
-        super().__init__("Assassin", "Combattant rapide avec éclairs destructeurs")
+        super().__init__("Assassin", "Combattant rapide avec éclairs destructeurs", profile_id=3)
         
         # Arme de départ : Lightning
         self.starting_weapon_class = LightningWeapon

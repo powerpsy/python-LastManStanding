@@ -597,16 +597,16 @@ class Game:
                     return
                 # Gestion du game over - Restart avec R
                 elif self.game_over and event.key == pygame.K_r and not self.transition_manager.is_active:
-                    # Transition avant restart
-                    def do_restart():
-                        self.restart_game()
+                    # Transition avant retour au menu
+                    def return_to_menu():
+                        self.running = False  # Sortir du jeu pour retourner au menu principal
                     
                     self._pre_transition_state = 'game_over'
                     self.transition_manager.set_screen_reference(self.screen)
                     self.transition_manager.start_transition(
                         transition_type="fade",
                         duration=self.config.TRANSITION_DURATION,
-                        on_complete=do_restart
+                        on_complete=return_to_menu
                     )
                     return
             
@@ -619,16 +619,16 @@ class Game:
                             if i == 0:  # QUIT
                                 self.running = False
                             elif i == 1:  # RESTART
-                                # Transition avant restart
-                                def do_restart():
-                                    self.restart_game()
+                                # Transition avant retour au menu
+                                def return_to_menu():
+                                    self.running = False  # Sortir du jeu pour retourner au menu principal
                                 
                                 self._pre_transition_state = 'exit'
                                 self.transition_manager.set_screen_reference(self.screen)
                                 self.transition_manager.start_transition(
                                     transition_type="fade",
                                     duration=self.config.TRANSITION_DURATION,
-                                    on_complete=do_restart
+                                    on_complete=return_to_menu
                                 )
                             elif i == 2:  # OPTION
                                 # À compléter : ouvrir un menu d'options si besoin
