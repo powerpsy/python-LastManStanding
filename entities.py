@@ -1108,16 +1108,16 @@ class BonusManager:
 
 class Beam:
     """
-    Classe pour les rayons laser continus avec rotation
+    Classe pour les rayons laser néon bleus persistants avec rotation continue
     
     NOUVEAU COMPORTEMENT:
     - Vise l'ennemi le plus proche au moment de la création
-    - Effectue une rotation antihoraire autour du joueur pendant sa durée de vie
-    - La rotation augmente avec le niveau (30° à 360° au niveau 10)
-    - La durée augmente avec le niveau (1s à 3s au niveau 10)
+    - Rotation continue sans limite de durée
+    - Effet visuel néon bleu avec halo transparent
+    - Plusieurs beams selon le niveau (1, 2 ou 3 beams)
     """
     
-    def __init__(self, start_x, start_y, direction_x, direction_y, config, level, player=None):
+    def __init__(self, start_x, start_y, direction_x, direction_y, config, level, player=None, beam_index=0, total_beams=1):
         from weapon_config import get_weapon_stat
         
         # Position du joueur (centre de rotation)
@@ -1132,31 +1132,26 @@ class Beam:
         self.range = get_weapon_stat("Beam", "range", level)
         self.width = get_weapon_stat("Beam", "width", level)
         self.damage = get_weapon_stat("Beam", "damage", level)
+        self.rotation_speed_deg_per_sec = get_weapon_stat("Beam", "speed", level)
         
-        # Nouvelle gestion de la durée et rotation avec progressions
-        beam_config = getattr(config, 'BEAM', None)
-        if hasattr(config, 'BEAM') and hasattr(config.BEAM, 'duration_progression'):
-            # Si on a accès à la config complète
-            duration_progression = getattr(config.BEAM, 'duration_progression', [60] * 10)
-            rotation_progression = getattr(config.BEAM, 'rotation_progression', [30] * 10)
-        else:
-            # Fallback avec progressions codées en dur
-            duration_progression = [60, 75, 90, 105, 120, 135, 150, 165, 180, 180]
-            rotation_progression = [30, 45, 60, 90, 120, 180, 240, 270, 320, 360]
+        # Gestion des beams multiples
+        self.beam_index = beam_index
+        self.total_beams = total_beams
         
-        # Durée et rotation selon le niveau
-        level_index = min(level - 1, len(duration_progression) - 1)
-        self.duration = duration_progression[level_index]
-        self.total_rotation_degrees = rotation_progression[level_index]
+        # Angle initial arbitraire + décalage pour les beams multiples
+        base_angle = math.atan2(direction_y, direction_x)
+        if total_beams == 1:
+            self.initial_angle = base_angle
+        elif total_beams == 2:
+            # 2 beams : opposés à 180°
+            angle_offset = beam_index * math.pi  # 0° et 180°
+            self.initial_angle = base_angle + angle_offset
+        elif total_beams == 3:
+            # 3 beams : espacés de 120°
+            angle_offset = beam_index * (2 * math.pi / 3)  # 0°, 120°, 240°
+            self.initial_angle = base_angle + angle_offset
         
-        self.current_life = self.duration
-        
-        # Angle initial vers l'ennemi le plus proche
-        self.initial_angle = math.atan2(direction_y, direction_x)
         self.current_angle = self.initial_angle
-        
-        # Vitesse de rotation (antihoraire)
-        self.rotation_speed = math.radians(self.total_rotation_degrees) / self.duration  # radians par frame
         
         # Calcul des points actuels du beam
         self.start_x = self.center_x
@@ -1172,8 +1167,7 @@ class Beam:
         self.particle_timer = 0
     
     def update(self):
-        """Met à jour le faisceau avec rotation antihoraire"""
-        self.current_life -= 1
+        """Met à jour le faisceau avec rotation continue et persistance"""
         self.particle_timer += 1  # Incrémenter le timer des particules
         self.damage_timer += 1  # Incrémenter le timer des dégâts
         
@@ -1184,8 +1178,12 @@ class Beam:
             self.center_x = player_center_x
             self.center_y = player_center_y
         
-        # Effectuer la rotation antihoraire
-        self.current_angle = self.initial_angle + (self.duration - self.current_life) * self.rotation_speed
+        # Effectuer la rotation continue basée sur la vitesse en degrés/seconde
+        # Convertir la vitesse en radians par frame (60 FPS)
+        rotation_speed_rad_per_frame = math.radians(self.rotation_speed_deg_per_sec) / 60.0
+        
+        # Incrémenter l'angle de rotation
+        self.current_angle += rotation_speed_rad_per_frame
         
         # Recalculer les points du beam
         self.start_x = self.center_x
@@ -1193,7 +1191,8 @@ class Beam:
         self.end_x = self.center_x + math.cos(self.current_angle) * self.range
         self.end_y = self.center_y + math.sin(self.current_angle) * self.range
         
-        return self.current_life > 0
+        # Le beam est maintenant persistant (toujours actif)
+        return True
     
     def check_collision_with_enemies(self, enemies, game=None):
         """Vérifie les collisions avec les ennemis et applique les dégâts continus"""
@@ -1295,31 +1294,37 @@ class Beam:
         return max(0, min(1, t))
     
     def draw(self, screen, camera_x=0, camera_y=0):
-        """Dessine le rayon laser avec effet de lueur"""
-        if self.current_life <= 0:
-            return
+        """Dessine le rayon laser avec effet néon bleu"""
+        # Intensité constante pour l'effet néon persistant
+        intensity = 1.0
         
-        # Intensité basée sur la durée de vie restante
-        intensity = self.current_life / self.duration
-        
-        # Couleurs du laser (rouge/orange)
-        core_color = tuple(int(c * intensity) for c in (255, 100, 100))  # Rouge/orange
-        glow_color = tuple(int(c * intensity * 0.6) for c in (255, 200, 150))  # Lueur plus douce
+        # Couleurs néon bleues avec effet de halo
+        halo_color = (0, 50, 150, int(80 * intensity))     # Bleu foncé transparent pour le halo
+        edge_color = tuple(int(c * intensity) for c in (100, 200, 255))  # Bleu clair pour les bords
+        core_color = tuple(int(c * intensity) for c in (255, 255, 255))  # Blanc pur pour le centre
         
         # Points ajustés pour la caméra (utiliser les coordonnées actuelles)
         start_point = (int(self.start_x - camera_x), int(self.start_y - camera_y))
         end_point = (int(self.end_x - camera_x), int(self.end_y - camera_y))
         
-        # Dessiner la lueur (plus large)
-        if self.width > 2:
-            pygame.draw.line(screen, glow_color, start_point, end_point, int(self.width))
+        # Créer une surface temporaire pour l'effet de halo transparent
+        halo_surface = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+        halo_width = int(self.width + 8)
+        if halo_width > 0:
+            pygame.draw.line(halo_surface, halo_color, start_point, end_point, halo_width)
+            screen.blit(halo_surface, (0, 0))
         
-        # Dessiner le cœur du laser (plus fin)
-        core_width = max(2, int(self.width * 0.4))
+        # Dessiner la couche périphérique (bleu clair)
+        if self.width > 2:
+            pygame.draw.line(screen, edge_color, start_point, end_point, int(self.width))
+        
+        # Dessiner le cœur du laser (blanc, plus fin)
+        core_width = max(2, int(self.width * 0.5))
         pygame.draw.line(screen, core_color, start_point, end_point, core_width)
         
-        # Point lumineux au départ
-        pygame.draw.circle(screen, core_color, start_point, max(2, int(self.width * 0.3)))
+        # Point lumineux au départ (effet néon)
+        pygame.draw.circle(screen, core_color, start_point, max(3, int(self.width * 0.4)))
+        pygame.draw.circle(screen, edge_color, start_point, max(5, int(self.width * 0.6)))
 
 class DeathEffect:
     """Effet spécial pour la mort des ennemis spéciaux"""

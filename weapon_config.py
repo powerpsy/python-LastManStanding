@@ -61,22 +61,22 @@ class WeaponConfig:
     BEAM = {
         "name": "Beam",
         "max_level": 10,
-        "base_damage": 15,  # Dégâts par frame (continu)
-        "base_fire_rate": 120,  # frames entre les activations (2 secondes)
-        "base_range": 750,
-        "base_width": 12,  # Largeur du faisceau en pixels
-        "base_duration": 60,  # Durée du faisceau en frames (1 seconde)
-        "base_rotation_angle": 30,  # Rotation initiale en degrés (niveau 1)
+        "base_damage": 20,  # Dégâts par frame (continu) - augmenté pour compenser l'absence de durée
+        "base_fire_rate": 1,  # Très rapide car juste pour l'activation initiale
+        "base_range": 800,  # Portée augmentée
+        "base_width": 14,  # Largeur du faisceau en pixels - augmentée
+        "base_speed": 45,  # Vitesse de rotation en degrés par seconde
+        "base_count": 1,  # Nombre de beams simultanés
         
         # Progressions par niveau
-        "damage_progression": [1.0, 1.25, 1.56, 1.95, 2.44, 3.05, 3.81, 4.76, 5.95, 7.44],
-        "fire_rate_progression": [1.0, 0.9, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39],  # Plus bas = plus rapide
-        "range_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
-        "width_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
+        "damage_progression": [1.0, 1.3, 1.69, 2.20, 2.86, 3.72, 4.84, 6.29, 8.18, 10.63],
+        "fire_rate_progression": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],  # Pas de cooldown
+        "range_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.0],
+        "width_progression": [1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.5],
+        "speed_progression": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.0],  # Vitesse de rotation
         
-        # Nouvelles progressions pour la rotation
-        "duration_progression": [60, 75, 90, 105, 120, 135, 150, 165, 180, 180],  # De 1s à 3s au niveau 10
-        "rotation_progression": [30, 45, 60, 90, 120, 180, 240, 270, 320, 360]  # De 30° à 360° (tour complet)
+        # Progression du nombre de beams
+        "count_progression": [1, 1, 1, 2, 2, 2, 3, 3, 3, 3]  # 1 beam jusqu'au niveau 3, 2 beams niveaux 4-6, 3 beams niveaux 7-10
     }
 
 
@@ -215,14 +215,16 @@ def get_weapon_stat(weapon_name, stat_name, level):
     
     # Gestion spéciale pour les nouvelles stats du Beam
     if weapon_name.upper() == "BEAM":
-        if stat_name == "duration":
-            progression = weapon_config.get("duration_progression", [60] * 10)
+        if stat_name == "speed":
+            progression = weapon_config.get("speed_progression", [1.0] * 10)
             index = min(level - 1, len(progression) - 1)
-            return progression[index] if index >= 0 else 60
-        elif stat_name == "rotation":
-            progression = weapon_config.get("rotation_progression", [30] * 10)
+            base_value = weapon_config.get("base_speed", 45)
+            multiplier = progression[index] if index >= 0 else 1.0
+            return base_value * multiplier
+        elif stat_name == "count":
+            progression = weapon_config.get("count_progression", [1] * 10)
             index = min(level - 1, len(progression) - 1)
-            return progression[index] if index >= 0 else 30
+            return progression[index] if index >= 0 else 1
     
     # Valeur de base
     base_key = f"base_{stat_name}"

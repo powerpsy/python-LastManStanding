@@ -8,6 +8,7 @@ Utilise weapon_config.py pour tous les paramètres et progressions.
 
 import math
 import pygame
+from entities import Beam
 from abc import ABC, abstractmethod
 from entities import CanonProjectile, Lightning, EnergyOrb, Beam
 from weapon_config import WeaponConfig, SkillConfig, get_weapon_stat, get_skill_stat
@@ -258,42 +259,32 @@ class BeamWeapon(Weapon):
         self.config = config
     
     def fire(self, player, enemies, projectiles, config):
-        if not enemies or not self.can_fire(config):
+        # Vérifier si on a déjà des beams actifs pour ce niveau
+        current_beams = [p for p in projectiles if isinstance(p, Beam)]
+        expected_beam_count = get_weapon_stat("Beam", "count", self.level)
+        
+        # Si on a déjà le bon nombre de beams, ne rien faire
+        if len(current_beams) == expected_beam_count:
             return None
         
-        # Trouver l'ennemi le plus proche dans la portée
+        # Sinon, supprimer tous les beams existants et en créer de nouveaux
+        projectiles[:] = [p for p in projectiles if not isinstance(p, Beam)]
+        
         player_center_x = player.x + player.size // 2
         player_center_y = player.y + player.size // 2
         
-        weapon_range = get_weapon_stat("Beam", "range", self.level)
-        enemies_in_range = [e for e in enemies 
-                           if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= weapon_range]
+        # Direction initiale arbitraire (vers la droite par défaut)
+        direction_x, direction_y = 1.0, 0.0
         
-        if not enemies_in_range:
-            return None
+        # Créer le nombre approprié de beams selon le niveau
+        beam_count = expected_beam_count
         
-        closest_enemy = min(enemies_in_range, key=lambda e: 
-            math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
+        for i in range(beam_count):
+            # Créer le faisceau laser avec référence au joueur et index pour positionnement
+            beam = Beam(player_center_x, player_center_y, direction_x, direction_y, 
+                       config, self.level, player, beam_index=i, total_beams=beam_count)
+            projectiles.append(beam)
         
-        # Calculer la direction vers l'ennemi le plus proche
-        enemy_center_x = closest_enemy.x + closest_enemy.size // 2
-        enemy_center_y = closest_enemy.y + closest_enemy.size // 2
-        
-        dx = enemy_center_x - player_center_x
-        dy = enemy_center_y - player_center_y
-        distance = math.sqrt(dx**2 + dy**2)
-        
-        if distance > 0:
-            direction_x = dx / distance
-            direction_y = dy / distance
-        else:
-            direction_x, direction_y = 1, 0
-        
-        # Créer le faisceau laser avec référence au joueur
-        beam = Beam(player_center_x, player_center_y, direction_x, direction_y, config, self.level, player)
-        projectiles.append(beam)
-        
-        self.fire_timer = 0
         return None
     
     def update(self, config):
