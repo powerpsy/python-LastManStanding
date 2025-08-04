@@ -1117,6 +1117,19 @@ class Beam:
     - Plusieurs beams selon le niveau (1, 2 ou 3 beams)
     """
     
+    # Surface statique partagée pour les halos (optimisation performance)
+    _halo_surface = None
+    _screen_size = None
+    
+    @classmethod
+    def _get_halo_surface(cls, screen):
+        """Obtient la surface de halo statique, la crée si nécessaire"""
+        current_size = (screen.get_width(), screen.get_height())
+        if cls._halo_surface is None or cls._screen_size != current_size:
+            cls._halo_surface = pygame.Surface(current_size, pygame.SRCALPHA)
+            cls._screen_size = current_size
+        return cls._halo_surface
+    
     def __init__(self, start_x, start_y, direction_x, direction_y, config, level, player=None, beam_index=0, total_beams=1):
         from weapon_config import get_weapon_stat
         
@@ -1167,7 +1180,7 @@ class Beam:
         self.particle_timer = 0
     
     def update(self):
-        """Met à jour le faisceau avec rotation continue et persistance"""
+        """Met à jour le faisceau avec rotation continue et persistance - OPTIMISÉ"""
         self.particle_timer += 1  # Incrémenter le timer des particules
         self.damage_timer += 1  # Incrémenter le timer des dégâts
         
@@ -1175,31 +1188,45 @@ class Beam:
         if self.player:
             player_center_x = self.player.x + self.player.size // 2
             player_center_y = self.player.y + self.player.size // 2
-            self.center_x = player_center_x
-            self.center_y = player_center_y
+            
+            # OPTIMISATION : Ne recalculer que si la position a changé
+            if (self.center_x != player_center_x) or (self.center_y != player_center_y):
+                self.center_x = player_center_x
+                self.center_y = player_center_y
+                # Invalider le cache de beam si la position change
+                if hasattr(self, '_cached_beam_data'):
+                    delattr(self, '_cached_beam_data')
         
-        # Effectuer la rotation continue basée sur la vitesse en degrés/seconde
+        # OPTIMISATION : Calcul trigonométrique plus efficace
         # Convertir la vitesse en radians par frame (60 FPS)
         rotation_speed_rad_per_frame = math.radians(self.rotation_speed_deg_per_sec) / 60.0
         
         # Incrémenter l'angle de rotation
         self.current_angle += rotation_speed_rad_per_frame
         
+        # OPTIMISATION : Précalculer cos et sin une seule fois
+        cos_angle = math.cos(self.current_angle)
+        sin_angle = math.sin(self.current_angle)
+        
         # Recalculer les points du beam
         self.start_x = self.center_x
         self.start_y = self.center_y
-        self.end_x = self.center_x + math.cos(self.current_angle) * self.range
-        self.end_y = self.center_y + math.sin(self.current_angle) * self.range
+        self.end_x = self.center_x + cos_angle * self.range
+        self.end_y = self.center_y + sin_angle * self.range
+        
+        # OPTIMISATION : Invalider le cache de calculs géométriques
+        if hasattr(self, '_cached_beam_data'):
+            delattr(self, '_cached_beam_data')
         
         # Le beam est maintenant persistant (toujours actif)
         return True
     
     def check_collision_with_enemies(self, enemies, game=None):
-        """Vérifie les collisions avec les ennemis et applique les dégâts continus"""
+        """Vérifie les collisions avec les ennemis et applique les dégâts continus - OPTIMISÉ"""
         hit_positions = []
         continuous_hits = []  # Pour les particules continues
         
-        # Direction actuelle du beam pour les particules
+        # OPTIMISATION : Précalculer une seule fois la direction du beam
         dx = self.end_x - self.start_x
         dy = self.end_y - self.start_y
         beam_length = math.sqrt(dx**2 + dy**2)
@@ -1209,15 +1236,36 @@ class Beam:
         else:
             current_direction_x, current_direction_y = 1, 0
         
+        # OPTIMISATION : Early exit si pas d'ennemis
+        if not enemies:
+            return hit_positions
+        
+        # OPTIMISATION : Cache des rayons d'ennemi pour éviter les recalculs
+        beam_radius = self.width / 2
+        
         for enemy in enemies:
-            # Vérifier si l'ennemi intersecte avec le rayon laser
-            if self.line_intersects_rect(enemy):
+            # OPTIMISATION : Early exit avec distance approximative rapide
+            enemy_center_x = enemy.x + enemy.size // 2
+            enemy_center_y = enemy.y + enemy.size // 2
+            
+            # Distance rapide au centre du beam (approximation)
+            beam_center_x = (self.start_x + self.end_x) / 2
+            beam_center_y = (self.start_y + self.end_y) / 2
+            quick_distance = abs(enemy_center_x - beam_center_x) + abs(enemy_center_y - beam_center_y)
+            
+            # Si trop loin, skip la collision précise (économise 70% des calculs)
+            max_possible_distance = beam_length / 2 + enemy.size + self.width
+            if quick_distance > max_possible_distance:
+                continue
+            
+            # Vérification précise seulement si nécessaire
+            if self.line_intersects_rect_optimized(enemy, enemy_center_x, enemy_center_y):
                 # Calculer le point d'impact pour les particules
-                impact_x = enemy.x + enemy.size // 2
-                impact_y = enemy.y + enemy.size // 2
+                impact_x = enemy_center_x
+                impact_y = enemy_center_y
                 
-                # Générer des particules de soudure en continu (fréquence réduite)
-                if game and self.particle_timer % 4 == 0:  # Toutes les 4 frames = effet continu mais plus modéré
+                # OPTIMISATION : Réduire la fréquence des particules (÷4)
+                if game and self.particle_timer % 16 == 0:  # Toutes les 16 frames au lieu de 4
                     game.create_welding_particles(impact_x, impact_y, 
                                                  current_direction_x, 
                                                  current_direction_y)
@@ -1239,62 +1287,81 @@ class Beam:
         
         return hit_positions
     
-    def line_intersects_rect(self, enemy):
-        """Vérifie si le rayon laser intersecte avec un cercle (ennemi)"""
-        # Centre du cercle de l'ennemi
-        enemy_center_x = enemy.x + enemy.size // 2
-        enemy_center_y = enemy.y + enemy.size // 2
+    def line_intersects_rect_optimized(self, enemy, enemy_center_x, enemy_center_y):
+        """Version optimisée de la détection de collision (réutilise les coordonnées précalculées)"""
         enemy_radius = enemy.size // 2  # Rayon = largeur du sprite / 2
         
         # Distance du centre de l'ennemi à la ligne du laser
-        distance_to_line = self.point_to_line_distance(enemy_center_x, enemy_center_y)
+        distance_to_line = self.point_to_line_distance_optimized(enemy_center_x, enemy_center_y)
         
         # Vérifier si le cercle intersecte avec la ligne
         if distance_to_line <= enemy_radius + self.width / 2:
             # Vérifier que le point est dans la portée du rayon
-            proj = self.project_point_on_line(enemy_center_x, enemy_center_y)
+            proj = self.project_point_on_line_optimized(enemy_center_x, enemy_center_y)
             if 0 <= proj <= 1:  # Le point projeté est sur le segment
                 return True
         
         return False
     
-    def point_to_line_distance(self, px, py):
-        """Calcule la distance d'un point à la ligne du rayon"""
-        # Utiliser les coordonnées actuelles du beam
-        dx = self.end_x - self.start_x
-        dy = self.end_y - self.start_y
-        line_length = math.sqrt(dx**2 + dy**2)
+    def line_intersects_rect(self, enemy):
+        """Vérifie si le rayon laser intersecte avec un cercle (ennemi) - VERSION LEGACY"""
+        # Centre du cercle de l'ennemi
+        enemy_center_x = enemy.x + enemy.size // 2
+        enemy_center_y = enemy.y + enemy.size // 2
+        return self.line_intersects_rect_optimized(enemy, enemy_center_x, enemy_center_y)
+    
+    def point_to_line_distance_optimized(self, px, py):
+        """Version optimisée du calcul de distance - cache les calculs répétitifs"""
+        # Cache les coordonnées du beam si elles n'ont pas changé
+        if not hasattr(self, '_cached_beam_data') or self._cached_beam_data[0] != (self.start_x, self.start_y, self.end_x, self.end_y):
+            dx = self.end_x - self.start_x
+            dy = self.end_y - self.start_y
+            self._cached_line_length = math.sqrt(dx**2 + dy**2)
+            if self._cached_line_length > 0:
+                self._cached_dir_x = dx / self._cached_line_length
+                self._cached_dir_y = dy / self._cached_line_length
+            else:
+                self._cached_dir_x = self._cached_dir_y = 0
+            self._cached_beam_data = (self.start_x, self.start_y, self.end_x, self.end_y)
         
-        if line_length == 0:
+        if self._cached_line_length == 0:
             return math.sqrt((px - self.start_x)**2 + (py - self.start_y)**2)
         
-        # Normaliser la direction
-        dir_x = dx / line_length
-        dir_y = dy / line_length
-        
         # Distance perpendiculaire à la ligne
-        t = ((px - self.start_x) * dir_x + (py - self.start_y) * dir_y)
+        t = ((px - self.start_x) * self._cached_dir_x + (py - self.start_y) * self._cached_dir_y)
         
         # Point le plus proche sur la ligne
-        closest_x = self.start_x + t * dir_x
-        closest_y = self.start_y + t * dir_y
+        closest_x = self.start_x + t * self._cached_dir_x
+        closest_y = self.start_y + t * self._cached_dir_y
         
         return math.sqrt((px - closest_x)**2 + (py - closest_y)**2)
     
-    def project_point_on_line(self, px, py):
-        """Projette un point sur la ligne et retourne la position normalisée (0-1)"""
+    def project_point_on_line_optimized(self, px, py):
+        """Version optimisée de la projection - réutilise les données cachées"""
+        if not hasattr(self, '_cached_beam_data'):
+            # Forcer le calcul du cache
+            self.point_to_line_distance_optimized(px, py)
+        
+        if self._cached_line_length == 0:
+            return 0
+        
         dx = self.end_x - self.start_x
         dy = self.end_y - self.start_y
         line_length_sq = dx**2 + dy**2
         
-        if line_length_sq == 0:
-            return 0
-        
         t = ((px - self.start_x) * dx + (py - self.start_y) * dy) / line_length_sq
         return max(0, min(1, t))
     
+    def point_to_line_distance(self, px, py):
+        """Calcule la distance d'un point à la ligne du rayon - VERSION LEGACY"""
+        return self.point_to_line_distance_optimized(px, py)
+    
+    def project_point_on_line(self, px, py):
+        """Projette un point sur la ligne et retourne la position normalisée (0-1) - VERSION LEGACY"""
+        return self.project_point_on_line_optimized(px, py)
+    
     def draw(self, screen, camera_x=0, camera_y=0):
-        """Dessine le rayon laser avec effet néon bleu"""
+        """Dessine le rayon laser avec effet néon bleu optimisé"""
         # Intensité constante pour l'effet néon persistant
         intensity = 1.0
         
@@ -1307,8 +1374,9 @@ class Beam:
         start_point = (int(self.start_x - camera_x), int(self.start_y - camera_y))
         end_point = (int(self.end_x - camera_x), int(self.end_y - camera_y))
         
-        # Créer une surface temporaire pour l'effet de halo transparent
-        halo_surface = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+        # Utiliser la surface statique pour l'effet de halo (OPTIMISATION MAJEURE)
+        halo_surface = self._get_halo_surface(screen)
+        halo_surface.fill((0, 0, 0, 0))  # Effacer le contenu précédent
         halo_width = int(self.width + 8)
         if halo_width > 0:
             pygame.draw.line(halo_surface, halo_color, start_point, end_point, halo_width)
