@@ -195,6 +195,7 @@ class StartMapZone:
         self.width = width
         self.height = height
         self.name = name
+        self.title = name  # Alias pour compatibilité
         self.description = description
         self.action = action  # Action à exécuter quand le joueur entre dans la zone
         self.color = color
@@ -223,6 +224,28 @@ class StartMapZone:
         border_color = (255, 255, 255) if self.is_hovered else (200, 200, 200)
         pygame.draw.rect(screen, border_color, 
                         (screen_x, screen_y, self.width, self.height), 3)
+        
+        # Dessiner le titre et la description si ce n'est pas une zone spéciale
+        if self.action != "player_select":  # La zone de sélection a son propre affichage
+            self._draw_zone_text(screen, screen_x, screen_y)
+    
+    def _draw_zone_text(self, screen, screen_x, screen_y):
+        """Dessine le titre et la description de la zone"""
+        # Police pour le titre
+        title_font = pygame.font.Font(None, 48)
+        desc_font = pygame.font.Font(None, 32)
+        
+        # Dessiner le titre si présent
+        if self.title:
+            title_surface = title_font.render(self.title, True, (255, 255, 255))
+            title_rect = title_surface.get_rect(center=(screen_x + self.width // 2, screen_y + self.height // 2 - 20))
+            screen.blit(title_surface, title_rect)
+        
+        # Dessiner la description si présente
+        if self.description:
+            desc_surface = desc_font.render(self.description, True, (200, 200, 200))
+            desc_rect = desc_surface.get_rect(center=(screen_x + self.width // 2, screen_y + self.height // 2 + 20))
+            screen.blit(desc_surface, desc_rect)
 
 
 class StartMap:
@@ -230,16 +253,14 @@ class StartMap:
     
     def __init__(self, config):
         self.config = config
-        self.tile_size = 64  # Taille d'une tuile
-        self.map_width = 50   # 50 tuiles de largeur
-        self.map_height = 50  # 50 tuiles de hauteur
         
-        # Créer le joueur pour la carte de démarrage
-        self.player = Player(
-            self.map_width * self.tile_size // 2,
-            self.map_height * self.tile_size // 2,
-            config
-        )
+        # Définir les dimensions de la carte AVANT de les utiliser
+        self.map_width = 30
+        self.map_height = 30
+        self.tile_size = 64
+        
+        # Configurer le curseur de souris comme dans le jeu principal
+        self._setup_mouse_cursor()
         
         # Créer le sélecteur de joueur
         self.player_selector = PlayerSelector(config)
@@ -248,7 +269,14 @@ class StartMap:
         initial_player_type = getattr(config, 'PLAYER_SPRITE_TYPE', 1)
         self.player_selector.selected_player_id = initial_player_type
         
-        # Appliquer le profil du joueur
+        # Créer le joueur pour la carte de démarrage
+        self.player = Player(
+            self.map_width * self.tile_size // 2,
+            self.map_height * self.tile_size // 2,
+            config
+        )
+        
+        # Appliquer le profil du joueur (utiliser la propriété directement)
         current_profile = self.player_profile
         current_profile.apply_player_stats(self.player, config)
         
@@ -304,7 +332,7 @@ class StartMap:
         play_zone = StartMapZone(
             play_x, play_y, zone_width, zone_height,
             "JOUER", 
-            "Commencer une nouvelle partie",
+            "",
             "play",
             color=(100, 200, 100)
         )
@@ -316,8 +344,8 @@ class StartMap:
         player_y = center_y + pentagon_radius * math.sin(angle2) - zone_height // 2
         player_select_zone = StartMapZone(
             player_x, player_y, zone_width * 2.5, zone_height * 2.5,  # Encore plus grand
+            "SÉLECTION JOUEUR",
             "",
-            "Choisissez votre personnage",
             "player_select",
             color=(200, 180, 100)
         )
@@ -330,7 +358,7 @@ class StartMap:
         minigames_zone = StartMapZone(
             minigames_x, minigames_y, zone_width, zone_height,
             "MINI-JEUX",
-            "Modes de jeu alternatifs",
+            "",
             "minigames",
             color=(200, 150, 100)
         )
@@ -343,7 +371,7 @@ class StartMap:
         quit_zone = StartMapZone(
             quit_x, quit_y, zone_width, zone_height,
             "QUITTER",
-            "Fermer le jeu",
+            "",
             "quit",
             color=(200, 100, 100)
         )
@@ -356,7 +384,7 @@ class StartMap:
         options_zone = StartMapZone(
             options_x, options_y, zone_width, zone_height,
             "OPTIONS",
-            "Configurer le jeu",
+            "",
             "options",
             color=(100, 150, 200)
         )
@@ -367,7 +395,7 @@ class StartMap:
             center_x - zone_width // 3, center_y - zone_height // 3, 
             zone_width // 1.5, zone_height // 1.5,
             f"PROFIL",
-            f"Profil actuel: {self.player_profile.name}",
+            f"{self.player_profile.name}",
             "profile_info",
             color=(150, 100, 200)
         )
@@ -514,17 +542,26 @@ class StartMap:
             world_x = mouse_x + self.camera_x
             world_y = mouse_y + self.camera_y
             
-            # Vérifier si on clique dans la zone de sélection de joueur
+            # Vérifier les clics sur toutes les zones
             for zone in self.zones:
-                if zone.action == "player_select" and zone.contains_point(world_x, world_y):
-                    # Calculer les coordonnées relatives à la zone
-                    relative_x = world_x - zone.x
-                    relative_y = world_y - zone.y
+                if zone.contains_point(world_x, world_y):
+                    print(f"🖱️ Clic sur la zone: {zone.title}")
+                    self.current_zone = zone
                     
-                    # Passer le clic au sélecteur de joueur
-                    if self.player_selector.handle_click(0, 0, zone.width, zone.height, relative_x, relative_y):
-                        # Mettre à jour le profil du joueur
-                        self._update_player_profile()
+                    if zone.action == "player_select":
+                        # Calculer les coordonnées relatives à la zone
+                        relative_x = world_x - zone.x
+                        relative_y = world_y - zone.y
+                        
+                        # Passer le clic au sélecteur de joueur
+                        if self.player_selector.handle_click(0, 0, zone.width, zone.height, relative_x, relative_y):
+                            # Mettre à jour le profil du joueur
+                            self._update_player_profile()
+                            return True
+                    else:
+                        # Pour les autres zones, déclencher l'action immédiatement
+                        self.selected_action = zone.action
+                        print(f"✅ Action '{zone.action}' déclenchée!")
                         return True
         return False
     
@@ -545,7 +582,7 @@ class StartMap:
         # Mettre à jour la zone de profil
         for zone in self.zones:
             if zone.action == "profile_info":
-                zone.description = f"Profil actuel: {current_profile.name}"
+                zone.description = f"{current_profile.name}"
                 break
         
         print(f"🎮 Profil changé: {current_profile.name}")
@@ -572,61 +609,29 @@ class StartMap:
         self.player.draw(screen)  # La méthode draw du joueur ne prend que screen et optionnellement shield_hits
         self.player.x, self.player.y = temp_x, temp_y
         
-        # Dessiner les textes des zones
-        self._draw_zone_texts(screen)
-        
-        # Dessiner l'interface
-        self._draw_ui(screen)
+        # Dessiner le curseur de souris
+        # Pas besoin de le dessiner car on utilise le curseur système maintenant
+
+    def _setup_mouse_cursor(self):
+        """Configure le curseur de souris personnalisé comme dans le jeu principal"""
+        try:
+            cursor_image = pygame.image.load("assets/player/pointer2.png").convert_alpha()
+            # Taille adaptative selon la config
+            cursor_size = max(48, int(48 * getattr(self.config, 'font_scale', 1.0)))
+            cursor_image = pygame.transform.scale(cursor_image, (cursor_size, cursor_size))
+            
+            hotspot = (cursor_size // 2, cursor_size // 2)
+            cursor = pygame.cursors.Cursor(hotspot, cursor_image)
+            pygame.mouse.set_cursor(cursor)
+            print(f"Curseur personnalisé chargé: assets/player/pointer2.png ({cursor_size}x{cursor_size})")
+        except pygame.error as e:
+            print(f"Impossible de charger le curseur personnalisé: {e}")
+            # Garder le curseur par défaut
+            pygame.mouse.set_visible(True)
     
-    def _draw_zone_texts(self, screen):
-        """Dessine les textes des zones"""
-        for zone in self.zones:
-            # Position à l'écran
-            screen_x = zone.x - self.camera_x
-            screen_y = zone.y - self.camera_y
-            
-            # Vérifier si la zone est visible à l'écran
-            if (screen_x < -zone.width or screen_x > self.config.WINDOW_WIDTH or
-                screen_y < -zone.height or screen_y > self.config.WINDOW_HEIGHT):
-                continue
-            
-            # Dessiner le nom de la zone
-            text_color = (255, 255, 255) if zone.is_hovered else (200, 200, 200)
-            text_surface = self.font_medium.render(zone.name, True, text_color)
-            text_rect = text_surface.get_rect(center=(screen_x + zone.width // 2, screen_y + zone.height // 2))
-            screen.blit(text_surface, text_rect)
-    
-    def _draw_ui(self, screen):
-        """Dessine l'interface utilisateur"""
-        # Titre du jeu en haut
-        title_text = self.font_large.render("LAST MAN STANDING", True, (255, 255, 255))
-        title_rect = title_text.get_rect(center=(self.config.WINDOW_WIDTH // 2, 50))
-        screen.blit(title_text, title_rect)
-        
-        # Informations sur la zone actuelle
-        if self.current_zone:
-            # Fond semi-transparent pour le texte d'aide
-            help_surface = pygame.Surface((self.config.WINDOW_WIDTH, 80), pygame.SRCALPHA)
-            help_surface.fill((0, 0, 0, 150))
-            screen.blit(help_surface, (0, self.config.WINDOW_HEIGHT - 80))
-            
-            # Texte d'aide
-            help_text = f"{self.current_zone.description}"
-            help_surface_text = self.font_medium.render(help_text, True, (255, 255, 255))
-            help_rect = help_surface_text.get_rect(center=(self.config.WINDOW_WIDTH // 2, self.config.WINDOW_HEIGHT - 50))
-            screen.blit(help_surface_text, help_rect)
-            
-            # Instructions
-            instruction_text = "Appuyez sur ESPACE ou E pour sélectionner"
-            instruction_surface = self.font_small.render(instruction_text, True, (200, 200, 200))
-            instruction_rect = instruction_surface.get_rect(center=(self.config.WINDOW_WIDTH // 2, self.config.WINDOW_HEIGHT - 20))
-            screen.blit(instruction_surface, instruction_rect)
-        
-        # Instructions de mouvement
-        movement_text = "Utilisez WASD ou les flèches pour vous déplacer"
-        movement_surface = self.font_small.render(movement_text, True, (150, 150, 150))
-        movement_rect = movement_surface.get_rect(center=(self.config.WINDOW_WIDTH // 2, self.config.WINDOW_HEIGHT - 100))
-        screen.blit(movement_surface, movement_rect)
+    def _draw_mouse_cursor(self, screen):
+        """Curseur géré par le système maintenant"""
+        pass
     
     def get_selected_action(self):
         """Retourne l'action sélectionnée et la remet à None"""
