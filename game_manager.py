@@ -24,8 +24,9 @@ class GameState(Enum):
 class GameManager:
     """Gestionnaire principal qui orchestre tous les états du jeu"""
     
-    def __init__(self, config):
+    def __init__(self, config, game_settings=None):
         self.config = config
+        self.game_settings = game_settings
         self.current_state = GameState.START_MAP
         self.clock = pygame.time.Clock()
         
@@ -41,8 +42,8 @@ class GameManager:
         self.screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), flags)
         pygame.display.set_caption("Last Man Standing")
         
-        # Initialiser la carte de démarrage
-        self.start_map = StartMap(config)
+        # Initialiser la carte de démarrage avec les paramètres
+        self.start_map = StartMap(config, game_settings)
         
         # Le jeu principal sera créé à la demande
         self.main_game = None

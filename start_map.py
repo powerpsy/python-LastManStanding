@@ -251,8 +251,9 @@ class StartMapZone:
 class StartMap:
     """Carte de démarrage interactive avec zones d'action"""
     
-    def __init__(self, config):
+    def __init__(self, config, game_settings=None):
         self.config = config
+        self.game_settings = game_settings
         
         # Définir les dimensions de la carte AVANT de les utiliser
         self.map_width = 30
@@ -265,9 +266,15 @@ class StartMap:
         # Créer le sélecteur de joueur
         self.player_selector = PlayerSelector(config)
         
-        # Définir le joueur initial selon la config
-        initial_player_type = getattr(config, 'PLAYER_SPRITE_TYPE', 1)
+        # Définir le joueur initial selon les paramètres sauvegardés ou la config
+        if game_settings:
+            initial_player_type = game_settings.get_selected_player()
+        else:
+            initial_player_type = getattr(config, 'PLAYER_SPRITE_TYPE', 1)
         self.player_selector.selected_player_id = initial_player_type
+        
+        # Appliquer le type de sprite à la config avant de créer le joueur
+        config.PLAYER_SPRITE_TYPE = initial_player_type
         
         # Créer le joueur pour la carte de démarrage
         self.player = Player(
@@ -569,6 +576,13 @@ class StartMap:
         """Met à jour le profil du joueur selon la sélection"""
         selected_id = self.player_selector.selected_player_id
         current_profile = PlayerProfileManager.get_profile(selected_id)
+        
+        # Sauvegarder le choix de joueur dans la configuration
+        if self.game_settings:
+            self.game_settings.set_selected_player(selected_id)
+        
+        # Changer le sprite du joueur selon la sélection
+        self.player.change_sprite_type(selected_id)
         
         # Sauvegarder la vitesse actuelle (modifiée pour le menu)
         current_speed = self.player.speed

@@ -7,15 +7,18 @@ import pygame
 import sys
 from game_manager import GameManager
 from config import Config
+from game_settings import GameSettings
 
 def main():
     """Fonction principale du jeu"""
+    # Charger les paramètres de jeu
+    game_settings = GameSettings()
+    
     # === CONFIGURATION DE LA RESOLUTION ===
-    # 1 = 1280x720 (720p)
-    # 2 = 1920x1080 (1080p) 
-    # 3 = 2560x1440 (1440p)
-    # None = Détection automatique selon l'écran
-    screen_size = 3  # Test en 1440p pour ajustements
+    # Utiliser la configuration sauvegardée ou forcer en 1440p pour les tests
+    screen_size = game_settings.get_screen_size()
+    if screen_size is None:
+        screen_size = 3  # Test en 1440p pour ajustements
     
     try:
         pygame.init()
@@ -23,8 +26,8 @@ def main():
         # Créer la configuration
         config = Config(forced_screen_size=screen_size)
         
-        # Créer et lancer le gestionnaire de jeu
-        game_manager = GameManager(config)
+        # Créer et lancer le gestionnaire de jeu avec les paramètres
+        game_manager = GameManager(config, game_settings)
         game_manager.run()
         
     except KeyboardInterrupt:

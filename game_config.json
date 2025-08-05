@@ -1,0 +1,20 @@
+{
+    "selected_player": 1,
+    "screen_size": null,
+    "volume_master": 1.0,
+    "volume_sfx": 1.0,
+    "volume_music": 1.0,
+    "show_fps": false,
+    "show_debug": false,
+    "controls": {
+        "move_up": "z",
+        "move_down": "s",
+        "move_left": "q",
+        "move_right": "d"
+    },
+    "graphics": {
+        "particles_quality": "high",
+        "screen_shake": true,
+        "camera_smooth": true
+    }
+}

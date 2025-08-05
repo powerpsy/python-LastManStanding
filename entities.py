@@ -309,6 +309,16 @@ class Player:
                 ]
             
             pygame.draw.polygon(screen, self.config.WHITE, points)
+    
+    def change_sprite_type(self, sprite_type):
+        """Change le type de sprite du joueur et recharge les animations"""
+        try:
+            self._load_player_sprite(sprite_type)
+            # Mettre à jour la config pour refléter le changement
+            self.config.PLAYER_SPRITE_TYPE = sprite_type
+            print(f"🎮 Sprite du joueur changé vers le type {sprite_type}")
+        except Exception as e:
+            print(f"⚠️ Erreur lors du changement de sprite : {e}")
 
 
 class Enemy:
