@@ -29,6 +29,11 @@ class Weapon(ABC):
         """Méthode abstraite pour tirer avec l'arme"""
         pass
     
+    def record_shot_fired(self, weapon_type, game):
+        """Enregistre un tir dans les statistiques du jeu"""
+        if game and hasattr(game, 'record_shot_fired'):
+            game.record_shot_fired(weapon_type)
+    
     @abstractmethod
     def update(self, config):
         """Met à jour les timers de l'arme"""
@@ -69,7 +74,7 @@ class CannonWeapon(Weapon):
     
     def fire(self, player, enemies, projectiles, config):
         if not enemies or not self.can_fire(config):
-            return
+            return False
         
         # Trouver l'ennemi le plus proche dans la portée
         player_center_x = player.x + player.size // 2
@@ -80,7 +85,7 @@ class CannonWeapon(Weapon):
                            if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= weapon_range]
         
         if not enemies_in_range:
-            return
+            return False
         
         closest_enemy = min(enemies_in_range, key=lambda e: 
             math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
@@ -103,6 +108,7 @@ class CannonWeapon(Weapon):
         projectiles.append(canon_projectile)
         
         self.fire_timer = 0
+        return True  # A tiré
         return None  # Pas d'effets spéciaux pour le canon
     
     def update(self, config):
@@ -125,7 +131,7 @@ class LightningWeapon(Weapon):
     
     def fire(self, player, enemies, projectiles, config):
         if not enemies or not self.can_fire(config):
-            return
+            return []
         
         # Trouver l'ennemi le plus proche dans la portée
         player_center_x = player.x + player.size // 2
@@ -136,7 +142,7 @@ class LightningWeapon(Weapon):
                            if math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2) <= weapon_range]
         
         if not enemies_in_range:
-            return
+            return []
         
         closest_enemy = min(enemies_in_range, key=lambda e: 
             math.sqrt((e.x - player_center_x)**2 + (e.y - player_center_y)**2))
@@ -182,6 +188,7 @@ class LightningWeapon(Weapon):
             hit_enemies.append((enemy.x + enemy.size // 2, enemy.y + enemy.size // 2))
         
         self.fire_timer = 0
+        return hit_enemies  # Retourner les positions touchées
         return hit_enemies  # Retourner les positions des ennemis touchés pour les effets
     
     def update(self, config):
@@ -265,7 +272,7 @@ class BeamWeapon(Weapon):
         
         # Si on a déjà le bon nombre de beams, ne rien faire
         if len(current_beams) == expected_beam_count:
-            return None
+            return False
         
         # Sinon, supprimer tous les beams existants et en créer de nouveaux
         projectiles[:] = [p for p in projectiles if not isinstance(p, Beam)]
@@ -285,7 +292,7 @@ class BeamWeapon(Weapon):
                        config, self.level, player, beam_index=i, total_beams=beam_count)
             projectiles.append(beam)
         
-        return None
+        return True  # A créé des nouveaux beams
     
     def update(self, config):
         self.fire_timer += 1

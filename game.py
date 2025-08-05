@@ -140,6 +140,40 @@ class Game:
         self.xp = 0
         self.xp_to_next_level = 100
         
+        # === SYSTÈME DE STATISTIQUES DE JEU ===
+        self.stats = {
+            # Dégâts reçus et bloqués
+            'damage_taken': 0,          # Total des dégâts reçus par le joueur
+            'damage_blocked': 0,        # Total des dégâts bloqués par le bouclier
+            
+            # Dégâts infligés par arme
+            'damage_dealt': {
+                'total': 0,             # Total global des dégâts infligés
+                'canon': 0,             # Dégâts par projectiles canon
+                'lightning': 0,         # Dégâts par éclairs
+                'beam': 0,              # Dégâts par rayons laser
+                'energy_orb': 0,        # Dégâts par boules d'énergie
+                'other': 0              # Autres types de dégâts
+            },
+            
+            # Statistiques de tir
+            'shots_fired': {
+                'canon': 0,
+                'lightning': 0,
+                'beam': 0,
+                'energy_orb': 0
+            },
+            
+            # Ennemis tués par arme
+            'enemies_killed_by_weapon': {
+                'canon': 0,
+                'lightning': 0,
+                'beam': 0,
+                'energy_orb': 0,
+                'other': 0
+            }
+        }
+        
         # Initialisation du background
         self.background = Background(config)
         
@@ -182,6 +216,35 @@ class Game:
         minutes = survival_time_ms // 60000
         seconds = (survival_time_ms % 60000) // 1000
         return f"{minutes:02d}:{seconds:02d}"
+    
+    # === MÉTHODES DE STATISTIQUES ===
+    def record_damage_taken(self, damage_amount):
+        """Enregistre les dégâts reçus par le joueur"""
+        self.stats['damage_taken'] += damage_amount
+    
+    def record_damage_blocked(self, damage_amount):
+        """Enregistre les dégâts bloqués par le bouclier"""
+        self.stats['damage_blocked'] += damage_amount
+    
+    def record_damage_dealt(self, damage_amount, weapon_type='other'):
+        """Enregistre les dégâts infligés par le joueur"""
+        self.stats['damage_dealt']['total'] += damage_amount
+        if weapon_type in self.stats['damage_dealt']:
+            self.stats['damage_dealt'][weapon_type] += damage_amount
+        else:
+            self.stats['damage_dealt']['other'] += damage_amount
+    
+    def record_shot_fired(self, weapon_type):
+        """Enregistre un tir effectué"""
+        if weapon_type in self.stats['shots_fired']:
+            self.stats['shots_fired'][weapon_type] += 1
+    
+    def record_enemy_killed(self, weapon_type='other'):
+        """Enregistre un ennemi tué par une arme spécifique"""
+        if weapon_type in self.stats['enemies_killed_by_weapon']:
+            self.stats['enemies_killed_by_weapon'][weapon_type] += 1
+        else:
+            self.stats['enemies_killed_by_weapon']['other'] += 1
     
     def transition_to_upgrade_screen(self):
         """Démarre une transition vers l'écran d'upgrade"""
@@ -723,7 +786,15 @@ class Game:
             if self.check_collision(self.player, enemy):
                 # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
                 if self.bonus_manager.can_take_damage():
-                    self.player.take_damage(self.config.ENEMY_DAMAGE, self.skill_manager)
+                    # Appliquer les dégâts et récupérer les informations
+                    damage_info = self.player.take_damage(self.config.ENEMY_DAMAGE, self.skill_manager)
+                    
+                    # Enregistrer les statistiques de dégâts
+                    if damage_info['damage_taken'] > 0:
+                        self.record_damage_taken(damage_info['damage_taken'])
+                    if damage_info['damage_blocked'] > 0:
+                        self.record_damage_blocked(damage_info['damage_blocked'])
+                    
                     if self.player.health <= 0:
                         self.transition_to_game_over()
                         break
@@ -735,11 +806,21 @@ class Game:
         for weapon in self.weapon_manager.weapons:
             if weapon.is_active:
                 if weapon.name == "Canon":  # CORRIGÉ: "Canon" au lieu de "Cannon"
-                    weapon.fire(self.player, self.enemies, self.canon_projectiles, self.config)
+                    if weapon.fire(self.player, self.enemies, self.canon_projectiles, self.config):
+                        self.record_shot_fired('canon')
                 elif weapon.name == "Lightning":
                     hit_positions = weapon.fire(self.player, self.enemies, self.lightnings, self.config)
-                    # Créer des effets d'explosion renforcés pour chaque ennemi touché par Lightning
+                    # Enregistrer le tir si des ennemis ont été touchés
                     if hit_positions:
+                        self.record_shot_fired('lightning')
+                        
+                        # Calculer et enregistrer les dégâts infligés
+                        from weapon_config import get_weapon_stat
+                        damage_per_enemy = get_weapon_stat("Lightning", "damage", weapon.level)
+                        total_damage = damage_per_enemy * len(hit_positions)
+                        self.record_damage_dealt(total_damage, 'lightning')
+                        
+                        # Créer des effets d'explosion renforcés pour chaque ennemi touché par Lightning
                         for x, y in hit_positions:
                             self.create_lightning_explosion_particles(x, y)
                     
@@ -747,6 +828,9 @@ class Game:
                     enemies_to_remove = []
                     for enemy in self.enemies:
                         if enemy.health <= 0:
+                            # Enregistrer l'ennemi tué par lightning
+                            self.record_enemy_killed('lightning')
+                            
                             # Créer effet de mort pour les ennemis spéciaux
                             if enemy.is_special:
                                 death_effect = DeathEffect(enemy.x, enemy.y, self.config)
@@ -766,7 +850,8 @@ class Game:
                             self.handle_enemy_drops(enemy)
                             self.enemies.remove(enemy)
                 elif weapon.name == "Beam":
-                    weapon.fire(self.player, self.enemies, self.beams, self.config)
+                    if weapon.fire(self.player, self.enemies, self.beams, self.config):
+                        self.record_shot_fired('beam')
                 elif weapon.name == "Orb":
                     # Les orb ne tirent pas de projectiles, elles orbitent
                     weapon.update_orbs(self.player.x, self.player.y, self.player.size)
@@ -970,11 +1055,15 @@ class Game:
         # Appliquer les dégâts à tous les ennemis touchés
         for enemy in targets:
             damage = int(self.config.LIGHTNING_DAMAGE * self.bonus_manager.get_damage_multiplier())
+            # Enregistrer les dégâts infligés
+            self.record_damage_dealt(damage, 'lightning')
             enemy.take_damage(damage)
             self.create_explosion_particles(enemy.x + enemy.size // 2,
                                           enemy.y + enemy.size // 2)
             
             if enemy.health <= 0:
+                # Enregistrer l'ennemi tué par cette arme
+                self.record_enemy_killed('lightning')
                 # Créer effet de mort pour les ennemis spéciaux
                 if enemy.is_special:
                     death_effect = DeathEffect(enemy.x, enemy.y, self.config)
@@ -1583,7 +1672,7 @@ class Game:
             self.screen.blit(text_surface, text_rect)
     
     def draw_game_over_screen(self):
-        """Dessine l'écran de game over avec les statistiques"""
+        """Dessine l'écran de game over avec les statistiques détaillées"""
         # Overlay rouge semi-transparent
         overlay = pygame.Surface((self.config.WINDOW_WIDTH, self.config.WINDOW_HEIGHT))
         overlay.set_alpha(128)
@@ -1593,89 +1682,179 @@ class Game:
         # === TITRE ===
         game_over_text = "GAME OVER"
         game_over_surface = self.font.render(game_over_text, True, self.config.WHITE)
-        game_over_rect = game_over_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 60))
+        game_over_rect = game_over_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, 50))
         self.screen.blit(game_over_surface, game_over_rect)
         
-        # === STATISTIQUES PRINCIPALES ===
-        y_offset = 120
+        # === COLONNES ===
+        left_col_x = self.config.WINDOW_WIDTH // 4
+        right_col_x = 3 * self.config.WINDOW_WIDTH // 4
+        y_offset = 100
         
+        # === COLONNE GAUCHE - STATISTIQUES PRINCIPALES ===
         # Temps de survie (arrêté au moment de la mort)
         survival_time = self.get_survival_time_string()
-        time_text = f"Survival Time: {survival_time}"
+        time_text = f"Temps de survie: {survival_time}"
         time_surface = self.small_font.render(time_text, True, self.config.YELLOW)
-        time_rect = time_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        time_rect = time_surface.get_rect(center=(left_col_x, y_offset))
         self.screen.blit(time_surface, time_rect)
-        y_offset += 30
+        y_offset += 25
         
         # Score final
         score_text = f"Score Final: {self.score}"
         score_surface = self.small_font.render(score_text, True, self.config.WHITE)
-        score_rect = score_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        score_rect = score_surface.get_rect(center=(left_col_x, y_offset))
         self.screen.blit(score_surface, score_rect)
-        y_offset += 30
+        y_offset += 25
         
-        # Niveau atteint
+        # Niveau et vague atteints
         level_text = f"Niveau atteint: {max(self.level, self.max_level_reached)}"
         level_surface = self.small_font.render(level_text, True, self.config.WHITE)
-        level_rect = level_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        level_rect = level_surface.get_rect(center=(left_col_x, y_offset))
         self.screen.blit(level_surface, level_rect)
-        y_offset += 30
+        y_offset += 20
         
-        # Vague atteinte
         wave_text = f"Vague atteinte: {self.wave_number}"
         wave_surface = self.small_font.render(wave_text, True, self.config.WHITE)
-        wave_rect = wave_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        wave_rect = wave_surface.get_rect(center=(left_col_x, y_offset))
         self.screen.blit(wave_surface, wave_rect)
-        y_offset += 30
+        y_offset += 35
+        
+        # === STATISTIQUES DE COMBAT ===
+        combat_title = "STATISTIQUES DE COMBAT"
+        combat_title_surface = self.small_font.render(combat_title, True, self.config.CYAN)
+        combat_title_rect = combat_title_surface.get_rect(center=(left_col_x, y_offset))
+        self.screen.blit(combat_title_surface, combat_title_rect)
+        y_offset += 25
         
         # Ennemis tués
         enemies_text = f"Ennemis éliminés: {self.enemies_killed}"
         enemies_surface = self.small_font.render(enemies_text, True, self.config.WHITE)
-        enemies_rect = enemies_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        enemies_rect = enemies_surface.get_rect(center=(left_col_x, y_offset))
         self.screen.blit(enemies_surface, enemies_rect)
-        y_offset += 50
+        y_offset += 20
+        
+        # Dégâts totaux infligés
+        total_damage_dealt = self.stats['damage_dealt']['total']
+        damage_dealt_text = f"Dégâts infligés: {total_damage_dealt}"
+        damage_dealt_surface = self.small_font.render(damage_dealt_text, True, self.config.GREEN)
+        damage_dealt_rect = damage_dealt_surface.get_rect(center=(left_col_x, y_offset))
+        self.screen.blit(damage_dealt_surface, damage_dealt_rect)
+        y_offset += 20
+        
+        # Dégâts reçus
+        damage_taken_text = f"Dégâts reçus: {self.stats['damage_taken']}"
+        damage_taken_surface = self.small_font.render(damage_taken_text, True, self.config.RED)
+        damage_taken_rect = damage_taken_surface.get_rect(center=(left_col_x, y_offset))
+        self.screen.blit(damage_taken_surface, damage_taken_rect)
+        y_offset += 20
+        
+        # Dégâts bloqués par le bouclier
+        damage_blocked_text = f"Dégâts bloqués: {self.stats['damage_blocked']}"
+        damage_blocked_surface = self.small_font.render(damage_blocked_text, True, (100, 150, 255))  # Bleu clair
+        damage_blocked_rect = damage_blocked_surface.get_rect(center=(left_col_x, y_offset))
+        self.screen.blit(damage_blocked_surface, damage_blocked_rect)
+        y_offset += 35
         
         # === ARMES ACQUISES ===
         weapons_title = f"ARMES ({len(self.weapon_manager.weapons)}/7):"
-        weapons_title_surface = self.small_font.render(weapons_title, True, self.config.CYAN)
-        weapons_title_rect = weapons_title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        weapons_title_surface = self.small_font.render(weapons_title, True, self.config.PURPLE)
+        weapons_title_rect = weapons_title_surface.get_rect(center=(left_col_x, y_offset))
         self.screen.blit(weapons_title_surface, weapons_title_rect)
         y_offset += 25
         
         for weapon in self.weapon_manager.weapons:
-            weapon_text = f"• {weapon.name} Niveau {weapon.level}"
+            weapon_text = f"• {weapon.name} Niv.{weapon.level}"
             weapon_surface = self.small_font.render(weapon_text, True, self.config.WHITE)
-            weapon_rect = weapon_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+            weapon_rect = weapon_surface.get_rect(center=(left_col_x, y_offset))
             self.screen.blit(weapon_surface, weapon_rect)
-            y_offset += 20
+            y_offset += 18
         
-        y_offset += 20
+        # === COLONNE DROITE - DÉTAIL DES DÉGÂTS PAR ARME ===
+        y_offset_right = 100
+        
+        damage_detail_title = "DÉGÂTS PAR ARME"
+        damage_detail_surface = self.small_font.render(damage_detail_title, True, self.config.CYAN)
+        damage_detail_rect = damage_detail_surface.get_rect(center=(right_col_x, y_offset_right))
+        self.screen.blit(damage_detail_surface, damage_detail_rect)
+        y_offset_right += 25
+        
+        # Détail par arme
+        weapon_colors = {
+            'canon': self.config.YELLOW,
+            'lightning': (150, 200, 255),  # Bleu clair
+            'beam': (255, 100, 255),       # Magenta
+            'energy_orb': (100, 255, 100), # Vert clair
+            'other': self.config.WHITE
+        }
+        
+        weapon_names = {
+            'canon': 'Canon',
+            'lightning': 'Éclair',
+            'beam': 'Rayon Laser',
+            'energy_orb': 'Orbe d\'Énergie',
+            'other': 'Autre'
+        }
+        
+        for weapon_type, damage in self.stats['damage_dealt'].items():
+            if weapon_type == 'total':
+                continue
+            
+            # Afficher seulement les armes avec des dégâts > 0
+            if damage > 0:
+                weapon_name = weapon_names.get(weapon_type, weapon_type)
+                weapon_damage_text = f"{weapon_name}: {damage}"
+                color = weapon_colors.get(weapon_type, self.config.WHITE)
+                weapon_damage_surface = self.small_font.render(weapon_damage_text, True, color)
+                weapon_damage_rect = weapon_damage_surface.get_rect(center=(right_col_x, y_offset_right))
+                self.screen.blit(weapon_damage_surface, weapon_damage_rect)
+                y_offset_right += 20
+        
+        y_offset_right += 15
+        
+        # === ENNEMIS TUÉS PAR ARME ===
+        kills_detail_title = "ÉLIMINATIONS PAR ARME"
+        kills_detail_surface = self.small_font.render(kills_detail_title, True, self.config.CYAN)
+        kills_detail_rect = kills_detail_surface.get_rect(center=(right_col_x, y_offset_right))
+        self.screen.blit(kills_detail_surface, kills_detail_rect)
+        y_offset_right += 25
+        
+        for weapon_type, kills in self.stats['enemies_killed_by_weapon'].items():
+            # Afficher seulement les armes avec des éliminations > 0
+            if kills > 0:
+                weapon_name = weapon_names.get(weapon_type, weapon_type)
+                weapon_kills_text = f"{weapon_name}: {kills}"
+                color = weapon_colors.get(weapon_type, self.config.WHITE)
+                weapon_kills_surface = self.small_font.render(weapon_kills_text, True, color)
+                weapon_kills_rect = weapon_kills_surface.get_rect(center=(right_col_x, y_offset_right))
+                self.screen.blit(weapon_kills_surface, weapon_kills_rect)
+                y_offset_right += 20
+        
+        y_offset_right += 35
         
         # === COMPÉTENCES ACQUISES ===
         skills_title = f"COMPÉTENCES ({len(self.skill_manager.skills)}/14):"
         skills_title_surface = self.small_font.render(skills_title, True, self.config.PURPLE)
-        skills_title_rect = skills_title_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        skills_title_rect = skills_title_surface.get_rect(center=(right_col_x, y_offset_right))
         self.screen.blit(skills_title_surface, skills_title_rect)
-        y_offset += 25
+        y_offset_right += 25
         
         if len(self.skill_manager.skills) == 0:
             no_skills_text = "Aucune compétence acquise"
             no_skills_surface = self.small_font.render(no_skills_text, True, (128, 128, 128))
-            no_skills_rect = no_skills_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+            no_skills_rect = no_skills_surface.get_rect(center=(right_col_x, y_offset_right))
             self.screen.blit(no_skills_surface, no_skills_rect)
-            y_offset += 20
         else:
             for skill in self.skill_manager.skills:
-                skill_text = f"• {skill.name} Niveau {skill.level}"
+                skill_text = f"• {skill.name} Niv.{skill.level}"
                 skill_surface = self.small_font.render(skill_text, True, self.config.WHITE)
-                self.screen.blit(skill_surface, (self.config.WINDOW_WIDTH//2 - 100, y_offset))
-                y_offset += 20
+                skill_rect = skill_surface.get_rect(center=(right_col_x, y_offset_right))
+                self.screen.blit(skill_surface, skill_rect)
+                y_offset_right += 18
         
-        # === INSTRUCTIONS ===
-        y_offset += 30
+        # === INSTRUCTIONS EN BAS ===
         restart_text = "R - Recommencer    ESC - Quitter"
         restart_surface = self.small_font.render(restart_text, True, self.config.WHITE)
-        restart_rect = restart_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, y_offset))
+        restart_rect = restart_surface.get_rect(center=(self.config.WINDOW_WIDTH//2, self.config.WINDOW_HEIGHT - 50))
         self.screen.blit(restart_surface, restart_rect)
     
     def restart_game(self):
@@ -1732,6 +1911,33 @@ class Game:
         self.game_end_time = None  # Réinitialiser le temps de fin
         self.enemies_killed = 0
         self.max_level_reached = 1
+        
+        # Réinitialiser les statistiques détaillées
+        self.stats = {
+            'damage_taken': 0,
+            'damage_blocked': 0,
+            'damage_dealt': {
+                'total': 0,
+                'canon': 0,
+                'lightning': 0,
+                'beam': 0,
+                'energy_orb': 0,
+                'other': 0
+            },
+            'shots_fired': {
+                'canon': 0,
+                'lightning': 0,
+                'beam': 0,
+                'energy_orb': 0
+            },
+            'enemies_killed_by_weapon': {
+                'canon': 0,
+                'lightning': 0,
+                'beam': 0,
+                'energy_orb': 0,
+                'other': 0
+            }
+        }
         
         # Régénérer un nouveau terrain
         self.background.regenerate()
@@ -2461,10 +2667,14 @@ class Game:
             for enemy in self.enemies[:]:
                 if self.check_collision(canon_projectile, enemy):
                     damage = int(canon_projectile.damage * self.bonus_manager.get_damage_multiplier())
+                    # Enregistrer les dégâts infligés
+                    self.record_damage_dealt(damage, 'canon')
                     enemy.take_damage(damage)
                     canon_projectiles_to_remove.append(canon_projectile)
                     
                     if enemy.health <= 0:
+                        # Enregistrer l'ennemi tué par cette arme
+                        self.record_enemy_killed('canon')
                         # Créer effet de mort pour les ennemis spéciaux
                         if enemy.is_special:
                             death_effect = DeathEffect(enemy.x, enemy.y, self.config)
@@ -2503,7 +2713,14 @@ class Game:
             if self.check_collision(projectile, self.player):
                 # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
                 if self.bonus_manager.can_take_damage():
-                    self.player.take_damage(projectile.damage, self.skill_manager)
+                    # Appliquer les dégâts et récupérer les informations
+                    damage_info = self.player.take_damage(projectile.damage, self.skill_manager)
+                    
+                    # Enregistrer les statistiques de dégâts
+                    if damage_info['damage_taken'] > 0:
+                        self.record_damage_taken(damage_info['damage_taken'])
+                    if damage_info['damage_blocked'] > 0:
+                        self.record_damage_blocked(damage_info['damage_blocked'])
                     
                     # Vérifier si le joueur est mort
                     if self.player.health <= 0:
@@ -2536,6 +2753,9 @@ class Game:
         enemies_to_remove = []
         for enemy in self.enemies:
             if enemy.health <= 0:
+                # Enregistrer l'ennemi tué par beam (approximation pour maintenant)
+                # TODO: Implémenter un système plus précis pour savoir quelle arme a tué l'ennemi
+                self.record_enemy_killed('beam')
                 # Créer effet de mort pour les ennemis spéciaux
                 if enemy.is_special:
                     death_effect = DeathEffect(enemy.x, enemy.y, self.config)
@@ -2591,6 +2811,8 @@ class Game:
                 if self.check_collision(orb, enemy):
                     # Infliger des dégâts à l'ennemi
                     damage = int(self.config.ENERGY_ORB_DAMAGE * self.bonus_manager.get_damage_multiplier())
+                    # Enregistrer les dégâts infligés
+                    self.record_damage_dealt(damage, 'energy_orb')
                     enemy.take_damage(damage)
                     
                     # Créer des particules à l'impact
@@ -2601,6 +2823,8 @@ class Game:
                     self.particles.extend(impact_particles)
                     
                     if enemy.health <= 0:
+                        # Enregistrer l'ennemi tué par cette arme
+                        self.record_enemy_killed('energy_orb')
                         # Calculer la direction de l'orbe pour l'effet de repousse
                         orb_direction_x = orb.x - player_center_x
                         orb_direction_y = orb.y - player_center_y

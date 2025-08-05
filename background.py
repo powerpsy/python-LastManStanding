@@ -196,7 +196,7 @@ class Background:
             player.y = bounds['max_y'] - player.size
             player.vel_y = 0
     
-    def draalf, screen, camera_x=0, camera_y=0):
+    def draw(self, screen, camera_x=0, camera_y=0):
         """Dessine l'arrière-plan avec les tiles d'herbe et les props de décoration"""
         if not self.grass_tiles:
             # Fallback: fond coloré simple VISIBLE

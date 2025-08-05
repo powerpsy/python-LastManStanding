@@ -175,20 +175,22 @@ class Player:
     def take_damage(self, damage, skill_manager=None):
         """Fait subir des dégâts au joueur en tenant compte du bouclier"""
         original_damage = damage
+        blocked_damage = 0
         
         # Vérifier si le joueur a des points de bouclier (compétence Bouclier)
         if hasattr(self, 'shield_points') and self.shield_points > 0:
             if damage <= self.shield_points:
                 # Le bouclier absorbe tous les dégâts
                 self.shield_points -= damage
+                blocked_damage = damage
                 print(f"🛡️ Bouclier absorbe {damage} dégâts (reste: {self.shield_points})")
                 damage = 0
             else:
                 # Le bouclier absorbe une partie des dégâts
-                absorbed = self.shield_points
+                blocked_damage = self.shield_points
                 damage -= self.shield_points
                 self.shield_points = 0
-                print(f"🛡️ Bouclier absorbe {absorbed} dégâts, {damage} dégâts restants")
+                print(f"🛡️ Bouclier absorbe {blocked_damage} dégâts, {damage} dégâts restants")
         
         # Appliquer les dégâts restants à la vie
         if damage > 0:
@@ -198,6 +200,12 @@ class Player:
         if (original_damage > 0 and skill_manager and 
             hasattr(skill_manager, 'notify_damage_taken')):
             skill_manager.notify_damage_taken()
+        
+        # Retourner les informations sur les dégâts pour les statistiques
+        return {
+            'damage_taken': damage,      # Dégâts effectivement reçus (après bouclier)
+            'damage_blocked': blocked_damage  # Dégâts bloqués par le bouclier
+        }
     
     def draw(self, screen, shield_hits=0):
         """Dessine le joueur avec l'animation de spritesheet et l'effet de bouclier"""
@@ -1274,6 +1282,10 @@ class Beam:
                 if self.damage_timer % self.damage_interval == 0:
                     enemy_was_alive = enemy.health > 0
                     enemy.take_damage(self.damage)
+                    
+                    # Enregistrer les dégâts infligés dans les statistiques de jeu
+                    if game and hasattr(game, 'record_damage_dealt'):
+                        game.record_damage_dealt(self.damage, 'beam')
                     
                     # Si l'ennemi est éliminé, créer une explosion renforcée et l'effet de désintégration
                     if enemy_was_alive and enemy.health <= 0 and game:
