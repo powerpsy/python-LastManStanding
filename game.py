@@ -2675,6 +2675,11 @@ class Game:
                     if enemy.health <= 0:
                         # Enregistrer l'ennemi tué par cette arme
                         self.record_enemy_killed('canon')
+                        
+                        # Créer des particules d'explosion pour tous les ennemis tués par canon
+                        self.create_explosion_particles(enemy.x + enemy.size // 2, 
+                                                      enemy.y + enemy.size // 2)
+                        
                         # Créer effet de mort pour les ennemis spéciaux
                         if enemy.is_special:
                             death_effect = DeathEffect(enemy.x, enemy.y, self.config)
