@@ -243,7 +243,7 @@ class Config:
         # Paramètres des vagues d'ennemis (identiques pour tous)
         self.INITIAL_ENEMIES_PER_WAVE = 1
         self.ENEMIES_INCREASE_PER_WAVE = 5
-        self.ENEMY_SPAWN_DELAY_BASE = 19
+        self.ENEMY_SPAWN_DELAY_BASE = 15
         self.ENEMY_SPAWN_DELAY_MIN = 1
         self.ENEMY_SPAWN_DELAY_REDUCTION = 0.85
         

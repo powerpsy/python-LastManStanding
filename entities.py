@@ -320,7 +320,6 @@ class Player:
         except Exception as e:
             print(f"⚠️ Erreur lors du changement de sprite : {e}")
 
-
 class Enemy:
     """Classe des ennemis avec IA de poursuite"""
     
@@ -593,6 +592,216 @@ class Enemy:
             pygame.draw.rect(screen, self.config.GREEN,
                            (int(self.x), int(self.y - 8), current_width, bar_height))
 
+class Boss:
+    """Classe du Boss - Ennemi puissant qui apparaît à certains niveaux"""
+    
+    def __init__(self, x, y, config, wave_number=7):
+        self.x = x
+        self.y = y
+        self.config = config
+        self.wave_number = wave_number
+        
+        # Taille du boss (plus grand qu'un ennemi normal)
+        self.size = config.ENEMY_SIZE * 4  # 4x plus grand
+
+        # Charger le sprite du boss
+        try:
+            boss_sprite = pygame.image.load("assets/enemy/boss1.png").convert_alpha()
+            if config.SPRITE_SMOOTHING:
+                self.sprite = pygame.transform.smoothscale(boss_sprite, (self.size, self.size))
+            else:
+                self.sprite = pygame.transform.scale(boss_sprite, (self.size, self.size))
+            print(f"🔥 Sprite du boss chargé : boss1.png ({self.size}x{self.size})")
+        except Exception as e:
+            print(f"⚠️ Erreur lors du chargement du sprite boss : {e}")
+            self.sprite = None
+        
+        # Santé du boss (5x plus élevée qu'avant)
+        base_health = config.ENEMY_HEALTH * 1000  # 5x plus de santé (était 200)
+        wave_bonus = (wave_number - 1) * 500  # Bonus plus important par vague
+        self.max_health = base_health + wave_bonus
+        self.health = self.max_health
+        
+        # Vitesse du boss (plus rapide qu'avant)
+        self.speed = config.ENEMY_SPEED * 7  # Plus rapide au lieu de plus lent
+        
+        # Animation de rotation
+        self.rotation_angle = 0
+        self.rotation_time = 0
+        self.rotation_speed = 2  # Plus lent que les ennemis normaux
+        
+        # Composante aléatoire pour l'IA
+        self.random_offset_x = 0
+        self.random_offset_y = 0
+        self.random_timer = 0
+        
+        # Timer pour générer des ennemis
+        self.spawn_timer = 0
+        self.spawn_delay = 30  # Génère un ennemi toutes les 0.5 seconde à 60 FPS
+        
+        # Système de tir du boss
+        self.fire_timer = 0
+        self.fire_delay = 30  # Tire toutes les 1.5 secondes (90 frames à 60 FPS)
+        
+        # État de mort
+        self.is_dead = False
+        self.death_timer = 0
+        self.death_duration = 300  # 5 secondes d'effets de mort
+        self.skull_spawn_timer = 0
+        self.skull_spawn_interval = 10  # Nouveau crâne toutes les 1/3 secondes
+        
+        # Type d'ennemi spécial pour les drops
+        self.is_special = True
+        self.bonus_type = random.choice(config.BONUS_TYPES)
+    
+    def update(self, player_x, player_y):
+        """Met à jour la position du boss et gère la génération d'ennemis"""
+        if self.is_dead:
+            self.death_timer += 1
+            return
+        
+        # Animation de rotation
+        dt = 1.0 / 60.0
+        self.rotation_time += dt * self.rotation_speed
+        self.rotation_angle = 3 * math.sin(self.rotation_time * math.pi)  # Rotation plus douce
+        
+        # Mouvement aléatoire
+        self.random_timer += 1
+        if self.random_timer >= 60:  # Change de direction toutes les secondes
+            self.random_offset_x = random.uniform(-0.3, 0.3)
+            self.random_offset_y = random.uniform(-0.3, 0.3)
+            self.random_timer = 0
+        
+        # Direction vers le joueur (mouvement plus lent et moins direct)
+        dx = player_x - (self.x + self.size//2)
+        dy = player_y - (self.y + self.size//2)
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance > 0:
+            # Normaliser la direction et ajouter une composante aléatoire
+            norm_dx = (dx / distance) + self.random_offset_x
+            norm_dy = (dy / distance) + self.random_offset_y
+            
+            # Mouvement plus lent et moins précis
+            self.x += norm_dx * self.speed * 0.7
+            self.y += norm_dy * self.speed * 0.7
+        
+        # Incrémenter le timer de génération d'ennemis
+        self.spawn_timer += 1
+        
+        # Incrémenter le timer de tir
+        self.fire_timer += 1
+    
+    def should_spawn_enemy(self):
+        """Retourne True si le boss doit générer un ennemi"""
+        if self.is_dead:
+            return False
+        
+        if self.spawn_timer >= self.spawn_delay:
+            self.spawn_timer = 0
+            return True
+        return False
+    
+    def should_fire(self):
+        """Retourne True si le boss doit tirer un projectile"""
+        if self.is_dead:
+            return False
+        
+        if self.fire_timer >= self.fire_delay:
+            self.fire_timer = 0
+            return True
+        return False
+    
+    def take_damage(self, damage, game=None):
+        """Applique des dégâts au boss"""
+        if self.is_dead:
+            return
+        
+        self.health = max(0, self.health - damage)
+        if self.health <= 0 and not self.is_dead:
+            self.is_dead = True
+            self.death_timer = 0
+            print(f"💀 BOSS VAINCU ! Début de la séquence de mort...")
+            
+            # Créer l'effet visuel de mort du boss si le jeu est disponible
+            if game:
+                boss_center_x = self.x + self.size // 2
+                boss_center_y = self.y + self.size // 2
+                # Importer BossDeathEffect localement pour éviter les imports circulaires
+                boss_death_effect = BossDeathEffect(boss_center_x, boss_center_y, self.config)
+                game.boss_death_effects.append(boss_death_effect)
+                print(f"💀 Effet de mort du boss créé ! 15 crânes vont apparaître pendant 5 secondes...")
+    
+    def should_spawn_skull(self):
+        """Retourne True si le boss doit générer un crâne lors de sa mort"""
+        if not self.is_dead:
+            return False
+        
+        self.skull_spawn_timer += 1
+        if self.skull_spawn_timer >= self.skull_spawn_interval:
+            self.skull_spawn_timer = 0
+            return self.death_timer < self.death_duration
+        return False
+    
+    def is_death_complete(self):
+        """Retourne True si la séquence de mort du boss est terminée"""
+        return self.is_dead and self.death_timer >= self.death_duration
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine le boss avec rotation et barre de vie"""
+        if self.is_dead and self.death_timer >= self.death_duration:
+            return  # Ne plus dessiner le boss si complètement mort
+        
+        # Calculer la position à l'écran
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+        
+        if self.sprite:
+            # Rotation du sprite
+            if self.rotation_angle != 0:
+                rotated_sprite = pygame.transform.rotate(self.sprite, self.rotation_angle)
+                # Centrer le sprite après rotation
+                rotated_rect = rotated_sprite.get_rect()
+                rotated_rect.center = (screen_x + self.size//2, screen_y + self.size//2)
+                screen.blit(rotated_sprite, rotated_rect)
+            else:
+                screen.blit(self.sprite, (screen_x, screen_y))
+        else:
+            # Fallback : dessiner un grand cercle rouge
+            center_x = int(screen_x + self.size//2)
+            center_y = int(screen_y + self.size//2)
+            radius = self.size//2
+            
+            # Couleur rouge pour le boss
+            boss_color = (200, 50, 50)
+            pygame.draw.circle(screen, boss_color, (center_x, center_y), radius)
+            pygame.draw.circle(screen, self.config.WHITE, (center_x, center_y), radius, 3)
+        
+        # Barre de vie du boss (plus grande et plus visible)
+        if not self.is_dead:
+            bar_width = self.size
+            bar_height = 8
+            health_ratio = self.health / self.max_health
+            
+            # Contour de la barre
+            pygame.draw.rect(screen, self.config.WHITE,
+                           (int(screen_x), int(screen_y - 15), bar_width, bar_height), 2)
+            
+            # Fond rouge
+            pygame.draw.rect(screen, self.config.RED,
+                           (int(screen_x), int(screen_y - 15), bar_width, bar_height))
+            
+            # Santé actuelle
+            current_width = int(bar_width * health_ratio)
+            pygame.draw.rect(screen, self.config.GREEN,
+                           (int(screen_x), int(screen_y - 15), current_width, bar_height))
+            
+            # Afficher le pourcentage de vie
+            health_percent = int(health_ratio * 100)
+            font = pygame.font.Font(None, 24)
+            text = font.render(f"BOSS: {health_percent}%", True, self.config.WHITE)
+            text_rect = text.get_rect(center=(screen_x + bar_width//2, screen_y - 25))
+            screen.blit(text, text_rect)
 
 class CanonProjectile:
     """Classe des projectiles du canon"""
@@ -627,7 +836,6 @@ class CanonProjectile:
         # Point lumineux au centre
         pygame.draw.circle(screen, self.config.WHITE,
                          (int(self.x), int(self.y)), self.size)
-
 
 class EnemyProjectile:
     """Classe des projectiles d'ennemis"""
@@ -666,6 +874,48 @@ class EnemyProjectile:
         pygame.draw.circle(screen, (255, 100, 100), (screen_x, screen_y), self.size)
         pygame.draw.circle(screen, (100, 0, 0), (screen_x, screen_y), self.size, 2)
 
+class BossProjectile:
+    """Classe des projectiles du boss - Gros et lents"""
+    
+    def __init__(self, x, y, target_x, target_y, config):
+        self.x = x
+        self.y = y
+        self.config = config
+        self.size = 30  # 5x plus gros qu'un projectile normal (6*5=30)
+        self.speed = config.SHOOTER_ENEMY_PROJECTILE_SPEED * 2  # 3x plus lent
+        self.damage = config.SHOOTER_ENEMY_PROJECTILE_DAMAGE * 2  # Plus de dégâts
+        
+        # Calculer la direction vers la cible
+        dx = target_x - x
+        dy = target_y - y
+        distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance > 0:
+            self.dx = dx / distance
+            self.dy = dy / distance
+        else:
+            self.dx = 0
+            self.dy = 0
+    
+    def update(self):
+        """Met à jour la position du projectile"""
+        self.x += self.dx * self.speed
+        self.y += self.dy * self.speed
+    
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """Dessine le gros projectile du boss"""
+        screen_x = int(self.x - camera_x)
+        screen_y = int(self.y - camera_y)
+        
+        # Gros projectile orange/rouge avec effet de lueur
+        # Cercle extérieur (lueur)
+        pygame.draw.circle(screen, (255, 150, 0), (screen_x, screen_y), self.size + 3)
+        # Cercle principal
+        pygame.draw.circle(screen, (255, 80, 0), (screen_x, screen_y), self.size)
+        # Cercle intérieur brillant
+        pygame.draw.circle(screen, (255, 200, 100), (screen_x, screen_y), self.size - 8)
+        # Contour noir
+        pygame.draw.circle(screen, (50, 0, 0), (screen_x, screen_y), self.size, 3)
 
 class Lightning:
     """Classe pour les éclairs instantanés"""
@@ -749,7 +999,6 @@ class Lightning:
             inner_color = tuple(min(255, int(c * 1.5)) for c in color)
             pygame.draw.line(screen, inner_color, start_point, end_point, max(1, thickness // 3))
 
-
 class Particle:
     """Classe pour les particules d'explosion"""
     
@@ -804,7 +1053,6 @@ class Particle:
         
         # Dessiner la particule
         pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.size)
-
 
 class WeldingParticle:
     """Classe pour les particules de soudure (effet du Beam)"""
@@ -920,7 +1168,6 @@ class WeldingParticle:
             # Centre brillant (toujours au moins 1 pixel)
             pygame.draw.circle(screen, color, (center_x, center_y), max(1, self.size))
 
-
 class EnergyOrb:
     """Classe pour les boules d'énergie qui orbitent autour du joueur"""
     
@@ -990,7 +1237,6 @@ class EnergyOrb:
     def get_collision_rect(self):
         """Retourne le rectangle de collision"""
         return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
-
 
 class BonusManager:
     """Gestionnaire des bonus temporaires du joueur"""
@@ -1122,7 +1368,6 @@ class BonusManager:
     def is_active(self, bonus_type):
         """Vérifie si un bonus est actif"""
         return bonus_type in self.active_bonuses
-
 
 class Beam:
     """
@@ -1291,7 +1536,10 @@ class Beam:
                 # Appliquer les dégâts continus à intervalles réguliers
                 if self.damage_timer % self.damage_interval == 0:
                     enemy_was_alive = enemy.health > 0
-                    enemy.take_damage(self.damage)
+                    if hasattr(enemy, 'is_boss') and enemy.is_boss:
+                        enemy.take_damage(self.damage, game)
+                    else:
+                        enemy.take_damage(self.damage)
                     
                     # Enregistrer les dégâts infligés dans les statistiques de jeu
                     if game and hasattr(game, 'record_damage_dealt'):
@@ -1512,6 +1760,126 @@ class DeathEffect:
             screen.blit(temp_surface, (screen_x - radius, screen_y - radius))
 
 
+class BossDeathEffect:
+    """Effet spécial pour la mort du boss - Multiple crânes qui partent dans toutes les directions"""
+    
+    def __init__(self, boss_x, boss_y, config):
+        self.config = config
+        self.boss_x = boss_x
+        self.boss_y = boss_y
+        
+        # Paramètres de l'animation (5 secondes)
+        self.total_duration = 300  # 5 secondes à 60 FPS
+        self.life_time = 0
+        self.is_finished = False
+        
+        # Créer plusieurs crânes qui partent dans toutes les directions
+        self.skulls = []
+        skull_count = 15  # 15 crânes
+        
+        for i in range(skull_count):
+            # Angle aléatoire pour chaque crâne
+            angle = (2 * math.pi * i / skull_count) + random.uniform(-0.3, 0.3)  # Distribution uniforme avec variation
+            
+            # Vitesse et distance aléatoires
+            speed = random.uniform(2.0, 4.0)  # Vitesse de déplacement
+            max_distance = random.uniform(150, 300)  # Distance maximale
+            
+            skull = {
+                'start_x': boss_x,
+                'start_y': boss_y,
+                'x': boss_x,
+                'y': boss_y,
+                'angle': angle,
+                'speed': speed,
+                'max_distance': max_distance,
+                'alpha': 255,
+                'rotation': random.uniform(0, 360),  # Rotation initiale aléatoire
+                'rotation_speed': random.uniform(-5, 5)  # Vitesse de rotation
+            }
+            self.skulls.append(skull)
+        
+        # Charger le sprite mort.png
+        try:
+            self.sprite = pygame.image.load("assets/enemy/mort.png").convert_alpha()
+            # Redimensionner le sprite (taille d'ennemi normal pour les crânes du boss)
+            sprite_size = config.ENEMY_SIZE
+            if config.SPRITE_SMOOTHING:
+                self.sprite = pygame.transform.smoothscale(self.sprite, (sprite_size, sprite_size))
+            else:
+                self.sprite = pygame.transform.scale(self.sprite, (sprite_size, sprite_size))
+            self.sprite = self.sprite.convert_alpha()
+            self.has_sprite = True
+        except (pygame.error, FileNotFoundError):
+            print("Sprite assets/enemy/mort.png non trouvé pour BossDeathEffect")
+            self.sprite = None
+            self.has_sprite = False
+    
+    def update(self):
+        """Met à jour l'animation des crânes du boss"""
+        self.life_time += 1
+        
+        if self.life_time >= self.total_duration:
+            self.is_finished = True
+            return
+        
+        # Mettre à jour chaque crâne
+        for skull in self.skulls:
+            # Mouvement du crâne
+            distance_traveled = skull['speed'] * self.life_time
+            
+            if distance_traveled < skull['max_distance']:
+                # Le crâne continue de se déplacer
+                skull['x'] = skull['start_x'] + math.cos(skull['angle']) * distance_traveled
+                skull['y'] = skull['start_y'] + math.sin(skull['angle']) * distance_traveled
+            
+            # Rotation du crâne
+            skull['rotation'] += skull['rotation_speed']
+            
+            # Calcul de l'alpha (fade out pendant les 2 dernières secondes)
+            fade_start_time = self.total_duration - 120  # 2 dernières secondes
+            if self.life_time >= fade_start_time:
+                fade_progress = (self.life_time - fade_start_time) / 120
+                skull['alpha'] = int(255 * (1.0 - fade_progress))
+            else:
+                skull['alpha'] = 255
+            
+            skull['alpha'] = max(0, min(255, skull['alpha']))
+    
+    def draw(self, screen, camera_x, camera_y):
+        """Dessine tous les crânes du boss"""
+        if self.is_finished:
+            return
+        
+        for skull in self.skulls:
+            if skull['alpha'] <= 0:
+                continue
+            
+            # Position à l'écran avec offset de caméra
+            screen_x = skull['x'] - camera_x
+            screen_y = skull['y'] - camera_y
+            
+            if self.has_sprite:
+                # Appliquer la rotation au sprite
+                rotated_sprite = pygame.transform.rotate(self.sprite, skull['rotation'])
+                rotated_sprite.set_alpha(skull['alpha'])
+                
+                # Centrer le sprite après rotation
+                sprite_rect = rotated_sprite.get_rect()
+                sprite_rect.center = (screen_x, screen_y)
+                
+                screen.blit(rotated_sprite, sprite_rect)
+            else:
+                # Effet par défaut si le sprite n'est pas disponible
+                radius = 15
+                color = (255, 0, 0, skull['alpha'])  # Rouge avec alpha
+                
+                # Créer une surface temporaire pour l'alpha
+                temp_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                pygame.draw.circle(temp_surface, color, (radius, radius), radius)
+                screen.blit(temp_surface, (screen_x - radius, screen_y - radius))
+
+
 class Collectible:
     """Classe de base pour les objets collectibles"""
     
@@ -1559,7 +1927,6 @@ class Collectible:
     def on_collect(self, player):
         """Effet appliqué au joueur lors de la collecte (à redéfinir dans les sous-classes)"""
         pass
-
 
 class Heart(Collectible):
     """Objet collectible coeur qui restaure la vie"""
@@ -1617,7 +1984,6 @@ class Heart(Collectible):
             print(f"💚 Coeur collecté ! +{healed} points de vie (vie: {player.health}/{player.max_health})")
         else:
             print(f"💚 Coeur collecté mais vie déjà au maximum ({player.health}/{player.max_health})")
-
 
 class Coin(Collectible):
     """Objet collectible pièce animée qui donne des points/monnaie"""
@@ -1738,7 +2104,6 @@ class Coin(Collectible):
         else:
             print(f"🪙 Pièce collectée ! +{self.config.COIN_VALUE} points")
 
-
 class OrbDeathEffect:
     """Effet de mort par orbe : repousse et fade rouge"""
     
@@ -1811,7 +2176,6 @@ class OrbDeathEffect:
             temp_surface = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
             temp_surface.fill(rect_color)
             screen.blit(temp_surface, (screen_x, screen_y))
-
 
 class BeamDeathEffect:
     """Effet de mort par beam : désintégration en cendres du sprite réel"""

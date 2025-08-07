@@ -2,7 +2,7 @@ import pygame
 import pygame.gfxdraw  # Pour l'antialiasing
 import random
 import math
-from entities import Player, Enemy, CanonProjectile, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, Coin, EnemyProjectile, OrbDeathEffect, BeamDeathEffect
+from entities import Player, Enemy, Boss, CanonProjectile, Lightning, Particle, WeldingParticle, EnergyOrb, BonusManager, Beam, DeathEffect, Heart, Coin, EnemyProjectile, OrbDeathEffect, BeamDeathEffect, BossProjectile, BossDeathEffect
 from background import Background
 from weapons import WeaponManager, SkillManager, CannonWeapon, LightningWeapon, OrbWeapon, BeamWeapon, SpeedSkill, RegenSkill, MagnetSkill, ShieldSkill
 from transitions import TransitionManager, TRANSITION_TYPES
@@ -72,8 +72,13 @@ class Game:
         self.player_profile = PlayerProfileManager.get_profile(getattr(config, 'PLAYER_SPRITE_TYPE', 1))
         self.player_profile.apply_player_stats(self.player, config)
         self.enemies = []
+        self.boss = None  # Boss actuel
+        self.boss_active = False  # Indique si un boss est en cours
+        self.boss_death_skulls = []  # Crânes générés lors de la mort du boss
+        self.boss_death_effects = []  # Effets visuels de mort du boss
         self.canon_projectiles = []
         self.enemy_projectiles = []  # Nouvelle liste pour les projectiles d'ennemis
+        self.boss_projectiles = []   # Nouvelle liste pour les projectiles du boss
         self.lightnings = []  # Nouvelle liste pour les éclairs
         self.beams = []       # Nouvelle liste pour les rayons laser
         self.particles = []   # Nouvelle liste pour les particules
@@ -722,37 +727,27 @@ class Game:
         self.bonus_manager.update(self)
         
         # Spawn des ennemis par vagues avec délai décroissant
-        if len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
-            # Nouvelle vague
-            self.wave_number += 1
-            self.score += self.config.SCORE_WAVE_BONUS_MULTIPLIER * self.wave_number  # Bonus de vague
-            self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE
-            self.enemies_spawned = 0
-            
-            # La progression des niveaux est maintenant basée sur les pièces collectées
-            # L'ancien système basé sur les vagues a été remplacé
-            
-            # Réduction du délai entre les ennemis (plus difficile)
-            reduction_factor = self.config.ENEMY_SPAWN_DELAY_REDUCTION ** (self.wave_number - 1)
-            self.enemy_spawn_delay = max(
-                self.min_spawn_delay,
-                int(self.base_spawn_delay * reduction_factor)
-            )
-            
-            print(f"Vague {self.wave_number} - {self.enemies_per_wave} ennemis")
-            
-            # Affichage des armes et compétences du nouveau système
-            weapons = self.weapon_manager.get_weapon_list()
-            skills = self.skill_manager.get_skill_list()
-            
-            weapon_names = [f"{w['name']} Niv.{w['level']}" for w in weapons]
-            skill_names = [f"{s['name']} Niv.{s['level']}" for s in skills]
-            
-            print(f"Armes ({len(weapons)}/7): {', '.join(weapon_names) if weapons else 'Aucune'}")
-            print(f"Compétences ({len(skills)}/14): {', '.join(skill_names) if skills else 'Aucune'}")
+        if len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave and not self.boss_active:
+            # Vérifier si c'est le moment de faire apparaître un boss
+            if (self.wave_number + 1) % 7 == 0 and (self.wave_number + 1) >= 7:  # Boss aux vagues 7, 14, 21, etc.
+                self.spawn_boss()
+            else:
+                # Nouvelle vague normale
+                self.start_new_wave()
         
-        # Spawn d'un nouvel ennemi si nécessaire
-        if self.enemies_spawned < self.enemies_per_wave:
+        # Gestion du boss
+        elif self.boss_active and self.boss:
+            if not self.boss.is_dead:
+                # Le boss génère des ennemis en continu
+                if self.boss.should_spawn_enemy():
+                    self.spawn_enemy_from_boss()
+            
+            # Vérifier si la mort du boss est complète
+            if self.boss.is_death_complete():
+                self.end_boss_fight()
+        
+        # Spawn d'un nouvel ennemi si nécessaire (seulement si pas de boss actif)
+        if not self.boss_active and self.enemies_spawned < self.enemies_per_wave:
             self.enemy_spawn_timer += 1
             if self.enemy_spawn_timer >= self.enemy_spawn_delay:
                 self.spawn_enemy()
@@ -799,6 +794,37 @@ class Game:
                         self.transition_to_game_over()
                         break
         
+        # Gestion des collisions avec le boss
+        if self.boss and not self.boss.is_dead:
+            self.boss.update(self.player.x + self.player.size//2, self.player.y + self.player.size//2)
+            
+            # Collision boss-joueur
+            if self.check_collision(self.player, self.boss):
+                if self.bonus_manager.can_take_damage():
+                    # Le boss fait plus de dégâts qu'un ennemi normal
+                    boss_damage = self.config.ENEMY_DAMAGE * 2
+                    damage_info = self.player.take_damage(boss_damage, self.skill_manager)
+                    
+                    # Enregistrer les statistiques de dégâts
+                    if damage_info['damage_taken'] > 0:
+                        self.record_damage_taken(damage_info['damage_taken'])
+                    if damage_info['damage_blocked'] > 0:
+                        self.record_damage_blocked(damage_info['damage_blocked'])
+                    
+                    if self.player.health <= 0:
+                        self.transition_to_game_over()
+            
+            # Vérifier si le boss doit tirer un projectile
+            if self.boss.should_fire():
+                projectile = BossProjectile(
+                    self.boss.x + self.boss.size // 2,
+                    self.boss.y + self.boss.size // 2,
+                    self.player.x + self.player.size // 2,
+                    self.player.y + self.player.size // 2,
+                    self.config
+                )
+                self.boss_projectiles.append(projectile)
+        
         # Nouveau système d'armes orienté objet
         self.weapon_manager.update_all(self.config)
         
@@ -809,7 +835,12 @@ class Game:
                     if weapon.fire(self.player, self.enemies, self.canon_projectiles, self.config):
                         self.record_shot_fired('canon')
                 elif weapon.name == "Lightning":
-                    hit_positions = weapon.fire(self.player, self.enemies, self.lightnings, self.config)
+                    # Créer une liste de cibles incluant les ennemis et le boss
+                    all_targets = self.enemies.copy()
+                    if self.boss and self.boss.health > 0:
+                        all_targets.append(self.boss)
+                    
+                    hit_positions = weapon.fire(self.player, all_targets, self.lightnings, self.config)
                     # Enregistrer le tir si des ennemis ont été touchés
                     if hit_positions:
                         self.record_shot_fired('lightning')
@@ -849,8 +880,17 @@ class Game:
                             # Gérer les drops avant de supprimer l'ennemi
                             self.handle_enemy_drops(enemy)
                             self.enemies.remove(enemy)
+                    
+                    # Vérifier si le boss a été tué par Lightning
+                    if self.boss and self.boss.health <= 0:
+                        self.end_boss_fight()
                 elif weapon.name == "Beam":
-                    if weapon.fire(self.player, self.enemies, self.beams, self.config):
+                    # Créer une liste de cibles incluant les ennemis et le boss
+                    all_targets = self.enemies.copy()
+                    if self.boss and self.boss.health > 0:
+                        all_targets.append(self.boss)
+                    
+                    if weapon.fire(self.player, all_targets, self.beams, self.config):
                         self.record_shot_fired('beam')
                 elif weapon.name == "Orb":
                     # Les orb ne tirent pas de projectiles, elles orbitent
@@ -916,6 +956,141 @@ class Game:
         is_special = random.random() < self.config.SPECIAL_ENEMY_SPAWN_CHANCE
         enemy = Enemy(x, y, self.config, is_special, self.wave_number)
         self.enemies.append(enemy)
+    
+    def start_new_wave(self):
+        """Démarre une nouvelle vague normale d'ennemis"""
+        self.wave_number += 1
+        self.score += self.config.SCORE_WAVE_BONUS_MULTIPLIER * self.wave_number  # Bonus de vague
+        self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE
+        self.enemies_spawned = 0
+        
+        # Réduction du délai entre les ennemis (plus difficile)
+        reduction_factor = self.config.ENEMY_SPAWN_DELAY_REDUCTION ** (self.wave_number - 1)
+        self.enemy_spawn_delay = max(
+            self.min_spawn_delay,
+            int(self.base_spawn_delay * reduction_factor)
+        )
+        
+        print(f"Vague {self.wave_number} - {self.enemies_per_wave} ennemis")
+        
+        # Affichage des armes et compétences du nouveau système
+        weapons = self.weapon_manager.get_weapon_list()
+        skills = self.skill_manager.get_skill_list()
+        
+        weapon_names = [f"{w['name']} Niv.{w['level']}" for w in weapons]
+        skill_names = [f"{s['name']} Niv.{s['level']}" for s in skills]
+        
+        print(f"Armes ({len(weapons)}/7): {', '.join(weapon_names) if weapons else 'Aucune'}")
+        print(f"Compétences ({len(skills)}/14): {', '.join(skill_names) if skills else 'Aucune'}")
+    
+    def spawn_boss(self):
+        """Fait apparaître un boss"""
+        self.wave_number += 1
+        self.score += self.config.SCORE_WAVE_BONUS_MULTIPLIER * self.wave_number * 2  # Double bonus pour boss
+        
+        # Position du boss (au centre de la carte)
+        world_bounds = self.background.get_world_bounds()
+        boss_x = world_bounds['max_x'] // 2
+        boss_y = world_bounds['max_y'] // 2
+        
+        # Créer le boss
+        self.boss = Boss(boss_x, boss_y, self.config, self.wave_number)
+        self.boss_active = True
+        self.boss_death_skulls = []
+        
+        print(f"🔥 BOSS APPARITION ! Vague {self.wave_number} - Préparez-vous au combat !")
+    
+    def spawn_enemy_from_boss(self):
+        """Génère un ennemi près du boss pendant le combat"""
+        if not self.boss:
+            return
+        
+        # Position aléatoire près du boss
+        angle = random.uniform(0, 2 * math.pi)
+        distance = random.uniform(100, 200)
+        
+        enemy_x = self.boss.x + math.cos(angle) * distance
+        enemy_y = self.boss.y + math.sin(angle) * distance
+        
+        # S'assurer que l'ennemi est dans les limites du monde
+        world_bounds = self.background.get_world_bounds()
+        enemy_x = max(0, min(enemy_x, world_bounds['max_x'] - 32))
+        enemy_y = max(0, min(enemy_y, world_bounds['max_y'] - 32))
+        
+        # Créer un ennemi normal (pas spécial pour ne pas surcharger)
+        enemy = Enemy(int(enemy_x), int(enemy_y), self.config, False, self.wave_number)
+        self.enemies.append(enemy)
+    
+    def spawn_boss_death_skull(self):
+        """Génère un crâne lors de la mort du boss"""
+        if not self.boss:
+            return
+        
+        # Position aléatoire autour du boss (sauvegarder la position du boss)
+        boss_center_x = self.boss.x + self.boss.size//2
+        boss_center_y = self.boss.y + self.boss.size//2
+        
+        angle = random.uniform(0, 2 * math.pi)
+        distance = random.uniform(20, 80)  # Distance un peu plus grande
+        
+        skull_x = boss_center_x + math.cos(angle) * distance
+        skull_y = boss_center_y + math.sin(angle) * distance
+        
+        # S'assurer que le crâne est dans les limites du monde
+        world_bounds = self.background.get_world_bounds()
+        skull_x = max(0, min(skull_x, world_bounds['max_x'] - 32))
+        skull_y = max(0, min(skull_y, world_bounds['max_y'] - 32))
+        
+        # Créer un ennemi spécial (crâne) avec une apparence distinctive
+        skull = Enemy(int(skull_x), int(skull_y), self.config, True, self.wave_number)
+        self.enemies.append(skull)
+        self.boss_death_skulls.append(skull)
+        
+        print(f"💀 Crâne libéré du boss ! Position: ({int(skull_x)}, {int(skull_y)}) - Total: {len(self.boss_death_skulls)}")
+    
+    def end_boss_fight(self):
+        """Termine le combat de boss et prépare la vague suivante"""
+        if self.boss:
+            # Position du boss pour les drops
+            boss_x = self.boss.x + self.boss.size // 2
+            boss_y = self.boss.y + self.boss.size // 2
+            
+            # Générer beaucoup de pièces (environ 20)
+            for i in range(20):
+                # Position aléatoire autour du boss
+                angle = random.uniform(0, 2 * math.pi)
+                distance = random.uniform(30, 100)
+                
+                coin_x = boss_x + math.cos(angle) * distance
+                coin_y = boss_y + math.sin(angle) * distance
+                
+                coin = Coin(coin_x, coin_y, self.config)
+                self.collectibles.append(coin)
+            
+            # Générer beaucoup de coeurs (environ 20)
+            for i in range(20):
+                # Position aléatoire autour du boss
+                angle = random.uniform(0, 2 * math.pi)
+                distance = random.uniform(30, 100)
+                
+                heart_x = boss_x + math.cos(angle) * distance
+                heart_y = boss_y + math.sin(angle) * distance
+                
+                heart = Heart(heart_x, heart_y, self.config)
+                self.collectibles.append(heart)
+            
+            # Créer l'effet visuel de mort du boss (crânes qui partent dans toutes les directions)
+            boss_death_effect = BossDeathEffect(boss_x, boss_y, self.config)
+            self.boss_death_effects.append(boss_death_effect)
+            print(f"💀 Effet de mort du boss créé ! 15 crânes vont apparaître pendant 5 secondes...")
+        
+        self.boss_active = False
+        self.boss = None
+        self.boss_death_skulls = []
+        self.enemies_spawned = 0
+        self.enemies_per_wave += self.config.ENEMIES_INCREASE_PER_WAVE * 2  # Augmentation plus importante après un boss
+        
+        print(f"🎉 BOSS VAINCU ! Préparez-vous pour la vague suivante...")
     
     def update_camera(self, player_was_moving, player_is_moving):
         """Met à jour la position de la caméra avec un délai"""
@@ -1963,6 +2138,7 @@ class Game:
         # === VIDER TOUTES LES LISTES D'OBJETS ===
         self.enemies.clear()
         self.enemy_projectiles.clear()  # ✅ Vider les projectiles ennemis
+        self.boss_projectiles.clear()   # ✅ Vider les projectiles du boss
         self.canon_projectiles.clear()
         self.lightnings.clear()
         self.beams.clear()
@@ -1972,6 +2148,7 @@ class Game:
         self.death_effects.clear()
         self.orb_death_effects.clear()
         self.beam_death_effects.clear()
+        self.boss_death_effects.clear()
         self.collectibles.clear()  # ✅ IMPORTANT: Vider les drops (pièces, cœurs, etc.)
         
         # === RÉINITIALISER LE GESTIONNAIRE DE BONUS ===
@@ -2070,6 +2247,17 @@ class Game:
             pygame.draw.rect(minimap_surface, enemy_color, 
                             (enemy_minimap_x - enemy_half_size, enemy_minimap_y - enemy_half_size, 
                              self.config.MINIMAP_ENEMY_SIZE, self.config.MINIMAP_ENEMY_SIZE))
+        
+        # Dessiner le boss (carré orange plus grand)
+        if self.boss and self.boss.health > 0:
+            boss_minimap_x = int(self.boss.x * scale + offset_x)
+            boss_minimap_y = int(self.boss.y * scale + offset_y)
+            boss_color = (255, 165, 0, self.config.MINIMAP_ALPHA)  # Orange pour le boss
+            boss_size = self.config.MINIMAP_ENEMY_SIZE * 2  # Plus grand que les ennemis normaux
+            boss_half_size = boss_size // 2
+            pygame.draw.rect(minimap_surface, boss_color, 
+                            (boss_minimap_x - boss_half_size, boss_minimap_y - boss_half_size, 
+                             boss_size, boss_size))
         
         # Dessiner un rectangle de bordure autour de la minimap avec transparence
         border_color = (200, 200, 200, self.config.MINIMAP_ALPHA)
@@ -2594,12 +2782,20 @@ class Game:
         for enemy in self.enemies:
             self.draw_entity_with_camera_offset(enemy, camera_x, camera_y)
         
+        # Dessiner le boss
+        if self.boss and self.boss.health > 0:
+            self.draw_entity_with_camera_offset(self.boss, camera_x, camera_y)
+        
         # Dessiner les projectiles de canon
         for canon_projectile in self.canon_projectiles:
             self.draw_entity_with_camera_offset(canon_projectile, camera_x, camera_y)
         
         # Dessiner les projectiles ennemis
         for projectile in self.enemy_projectiles:
+            self.draw_entity_with_camera_offset(projectile, camera_x, camera_y)
+        
+        # Dessiner les projectiles du boss
+        for projectile in self.boss_projectiles:
             self.draw_entity_with_camera_offset(projectile, camera_x, camera_y)
         
         # Dessiner les lightning (derrière le joueur)
@@ -2634,6 +2830,10 @@ class Game:
         # Dessiner les effets de mort par beam (cendres)
         for beam_death_effect in self.beam_death_effects:
             beam_death_effect.draw(self.screen, camera_x, camera_y)
+        
+        # Dessiner les effets de mort du boss (crânes multiples)
+        for boss_death_effect in self.boss_death_effects:
+            boss_death_effect.draw(self.screen, camera_x, camera_y)
         
         # Dessiner les collectibles (coeurs, etc.)
         for collectible in self.collectibles:
@@ -2697,6 +2897,25 @@ class Game:
                             self.enemies_killed += 1  # Incrémenter les statistiques
                         self.score += self.config.SCORE_PER_ENEMY_KILL
                     break
+            
+            # Collision avec le boss
+            if self.boss and not self.boss.is_dead:
+                if self.check_collision(canon_projectile, self.boss):
+                    damage = int(canon_projectile.damage * self.bonus_manager.get_damage_multiplier())
+                    self.record_damage_dealt(damage, 'canon')
+                    self.boss.take_damage(damage, self)
+                    canon_projectiles_to_remove.append(canon_projectile)
+                    
+                    if self.boss.is_dead:
+                        self.record_enemy_killed('canon')
+                        self.create_explosion_particles(self.boss.x + self.boss.size // 2, 
+                                                      self.boss.y + self.boss.size // 2)
+                        # Appliquer bonus de boss
+                        if self.boss.bonus_type:
+                            self.bonus_manager.apply_bonus(self.boss.bonus_type, self)
+                        
+                        self.score += self.config.SCORE_PER_ENEMY_KILL * 10  # Boss vaut 10x plus
+                    break
         
         # Supprimer les projectiles de canon marqués pour suppression
         for canon_projectile in canon_projectiles_to_remove:
@@ -2739,6 +2958,42 @@ class Game:
             if projectile in self.enemy_projectiles:
                 self.enemy_projectiles.remove(projectile)
         
+        # Mettre à jour et gérer les collisions des projectiles du boss
+        boss_projectiles_to_remove = []
+        for projectile in self.boss_projectiles:
+            projectile.update()
+            
+            # Vérifier si hors limites
+            if not (camera_bounds['left'] <= projectile.x <= camera_bounds['right'] and 
+                    camera_bounds['top'] <= projectile.y <= camera_bounds['bottom']):
+                boss_projectiles_to_remove.append(projectile)
+                continue
+            
+            # Collision avec le joueur
+            if self.check_collision(projectile, self.player):
+                # Vérifier si le joueur peut subir des dégâts (bouclier, invincibilité)
+                if self.bonus_manager.can_take_damage():
+                    # Appliquer les dégâts et récupérer les informations
+                    damage_info = self.player.take_damage(projectile.damage, self.skill_manager)
+                    
+                    # Enregistrer les statistiques de dégâts
+                    if damage_info['damage_taken'] > 0:
+                        self.record_damage_taken(damage_info['damage_taken'])
+                    if damage_info['damage_blocked'] > 0:
+                        self.record_damage_blocked(damage_info['damage_blocked'])
+                    
+                    # Vérifier si le joueur est mort
+                    if self.player.health <= 0:
+                        self.player.health = 0
+                        self.transition_to_game_over()
+                
+                boss_projectiles_to_remove.append(projectile)
+        
+        # Supprimer les projectiles du boss marqués pour suppression
+        for projectile in boss_projectiles_to_remove:
+            if projectile in self.boss_projectiles:
+                self.boss_projectiles.remove(projectile)
+        
         # Nettoyer les éclairs (ils se suppriment automatiquement via update())
         self.lightnings = [lightning for lightning in self.lightnings if lightning.update()]
         
@@ -2746,8 +3001,13 @@ class Game:
         active_beams = []
         for beam in self.beams:
             if beam.update():
-                # Vérifier les collisions avec les ennemis
-                hit_positions = beam.check_collision_with_enemies(self.enemies, self)
+                # Créer une liste de cibles incluant les ennemis et le boss
+                all_targets = self.enemies.copy()
+                if self.boss and self.boss.health > 0:
+                    all_targets.append(self.boss)
+                
+                # Vérifier les collisions avec les ennemis et le boss
+                hit_positions = beam.check_collision_with_enemies(all_targets, self)
                 # Créer des effets d'explosion pour chaque ennemi touché
                 for x, y in hit_positions:
                     self.create_explosion_particles(x, y)
@@ -2781,6 +3041,10 @@ class Game:
             if enemy in self.enemies:
                 self.enemies.remove(enemy)
         
+        # Vérifier si le boss a été tué par les beams
+        if self.boss and self.boss.health <= 0:
+            self.end_boss_fight()
+        
         # Nettoyer les particules (elles se suppriment automatiquement via update())
         self.particles = [particle for particle in self.particles if particle.update()]
         
@@ -2803,6 +3067,12 @@ class Game:
             if not beam_death_effect.update():
                 self.beam_death_effects.remove(beam_death_effect)
         
+        # Mettre à jour et nettoyer les effets de mort du boss
+        for boss_death_effect in self.boss_death_effects[:]:
+            boss_death_effect.update()
+            if boss_death_effect.is_finished:
+                self.boss_death_effects.remove(boss_death_effect)
+        
         # Nettoyer les orb et gérer leurs collisions
         player_center_x = self.player.x + self.player.size // 2
         player_center_y = self.player.y + self.player.size // 2
@@ -2810,6 +3080,8 @@ class Game:
         # Mettre à jour les orb et vérifier les collisions avec les ennemis
         for orb in self.energy_orbs[:]:
             orb.update(player_center_x, player_center_y)
+            
+            collision_occurred = False
             
             # Vérifier les collisions avec les ennemis
             for enemy in self.enemies[:]:
@@ -2854,7 +3126,27 @@ class Game:
                             self.enemies.remove(enemy)
                             self.enemies_killed += 1  # Incrémenter les statistiques
                         self.score += self.config.SCORE_PER_ENEMY_KILL
+                    collision_occurred = True
                     break  # Une orb ne peut toucher qu'un ennemi à la fois
+            
+            # Vérifier les collisions avec le boss (seulement si pas déjà de collision avec un ennemi)
+            if not collision_occurred and self.boss and self.boss.health > 0:
+                if self.check_collision(orb, self.boss):
+                    # Infliger des dégâts au boss
+                    damage = int(self.config.ENERGY_ORB_DAMAGE * self.bonus_manager.get_damage_multiplier())
+                    self.record_damage_dealt(damage, 'energy_orb')
+                    self.boss.take_damage(damage, self)
+                    
+                    # Créer des particules à l'impact
+                    impact_particles = []
+                    for i in range(5):
+                        particle = Particle(orb.x, orb.y, self.config)
+                        impact_particles.append(particle)
+                    self.particles.extend(impact_particles)
+                    
+                    # Vérifier si le boss est mort
+                    if self.boss.health <= 0:
+                        self.end_boss_fight()
     
     def apply_upgrade(self, upgrade):
         """Applique l'upgrade sélectionné avec le nouveau système orienté objet"""
